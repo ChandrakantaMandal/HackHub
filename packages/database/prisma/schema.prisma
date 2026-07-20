@@ -1,0 +1,248 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =====================
+// AUTH
+// =====================
+model Account {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  isVerified   Boolean  @default(false)
+  user         User?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// =====================
+// USER
+// =====================
+model User {
+  id         String       @id @default(uuid())
+  accountId  String       @unique
+  account    Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  username   String       @unique
+  name       String?
+  avatar     String?
+  bio        String?
+  role       UserRole     @default(PARTICIPANT)
+  teams      TeamMember[]
+  ownedTeams Team[]
+  comments   Comment[]
+  likes      Like[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  judge      Judge?
+}
+
+enum UserRole {
+  PARTICIPANT
+  JUDGE
+  ADMIN
+}
+
+// =====================
+// TEAM
+// =====================
+model Team {
+  id        String       @id @default(uuid())
+  name      String
+  ownerId   String
+  owner     User         @relation(fields: [ownerId], references: [id])
+  members   TeamMember[]
+  projects  Project[]
+  badges    TeamBadge[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+model TeamMember {
+  id       String   @id @default(uuid())
+  teamId   String
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     TeamRole @default(MEMBER)
+  joinedAt DateTime @default(now())
+
+  @@unique([teamId, userId])
+}
+
+enum TeamRole {
+  OWNER
+  MEMBER
+}
+
+// =====================
+// PROJECT
+// =====================
+model Project {
+  id          String           @id @default(uuid())
+  teamId      String
+  team        Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  category    String?
+  tags        String[]
+  status      ProjectStatus    @default(DRAFT)
+  deadline    DateTime?
+  tasks       Task[]
+  submission  Submission?
+  evaluations Evaluation[]
+  showcase    ShowcaseProject?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+enum ProjectStatus {
+  DRAFT
+  DEVELOPMENT
+  SUBMITTED
+  COMPLETED
+  WINNER
+}
+
+// =====================
+// TASK
+// =====================
+model Task {
+  id          String     @id @default(uuid())
+  projectId   String
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  assignedTo  String?
+  status      TaskStatus @default(TODO)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+// =====================
+// SUBMISSION
+// =====================
+model Submission {
+  id            String           @id @default(uuid())
+  projectId     String           @unique
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  githubUrl     String?
+  liveUrl       String?
+  documentation String?
+  status        SubmissionStatus @default(PENDING)
+  submittedAt   DateTime?
+  createdAt     DateTime         @default(now())
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// =====================
+// JUDGE
+// =====================
+model Judge {
+  id          String       @id @default(uuid())
+  userId      String       @unique
+  user        User         @relation(fields: [userId], references: [id])
+  evaluations Evaluation[]
+  createdAt   DateTime     @default(now())
+}
+
+model Evaluation {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  judgeId   String
+  judge     Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  score     Int
+  feedback  String?
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, judgeId])
+}
+
+// =====================
+// SHOWCASE
+// =====================
+model ShowcaseProject {
+  id          String    @id @default(uuid())
+  projectId   String    @unique
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  imageUrl    String?
+  featured    Boolean   @default(false)
+  views       Int       @default(0)
+  likes       Like[]
+  comments    Comment[]
+  createdAt   DateTime  @default(now())
+}
+
+model Like {
+  id         String          @id @default(uuid())
+  showcaseId String
+  showcase   ShowcaseProject @relation(fields: [showcaseId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime        @default(now())
+
+  @@unique([showcaseId, userId])
+}
+
+model Comment {
+  id         String          @id @default(uuid())
+  showcaseId String
+  showcase   ShowcaseProject @relation(fields: [showcaseId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User            @relation(fields: [userId], references: [id])
+  message    String
+  createdAt  DateTime        @default(now())
+}
+
+// =====================
+// BADGE SYSTEM
+// =====================
+model Badge {
+  id          String      @id @default(uuid())
+  name        String      @unique
+  description String?
+  icon        String?
+  type        BadgeType
+  teamBadges  TeamBadge[]
+  createdAt   DateTime    @default(now())
+}
+
+model TeamBadge {
+  id        String   @id @default(uuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  badgeId   String
+  badge     Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  reason    String?
+  awardedAt DateTime @default(now())
+
+  @@unique([teamId, badgeId])
+}
+
+enum BadgeType {
+  WINNER
+  RUNNER_UP
+  TOP_PROJECT
+  INNOVATION
+  BEST_UI
+  BEST_TECH
+  COMMUNITY_FAVORITE
+  SPECIAL
+}

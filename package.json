@@ -9,7 +9,10 @@
     "format": "turbo format",
     "typecheck": "turbo typecheck",
     "prepare": "husky",
-    "lint:staged": "lint-staged"
+    "lint:staged": "lint-staged",
+    "db:generate": "pnpm --filter @workspace/database db:generate",
+    "db:migrate": "pnpm --filter @workspace/database db:migrate",
+    "db:studio": "pnpm --filter @workspace/database db:studio"
   },
   "devDependencies": {
     "@types/morgan": "^1.9.10",
