@@ -1,9 +1,5 @@
-// services/auth.service.ts
-
 import bcrypt from "bcrypt"
-
-import { prisma } from "@workspace/database"
-
+import prisma from "@workspace/database"
 import {
   ConflictError,
   ValidationError,
@@ -11,10 +7,21 @@ import {
   NotFoundError,
   DatabaseError,
 } from "@workspace/error-handler"
+import {
+  saveRefreshToken,
+  getRefreshToken,
+  deleteRefreshToken,
+} from "@workspace/redis"
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+} from "@workspace/utils"
 
-import { generateAccessToken, generateRefreshToken } from "../utils/jwt"
+import crypto from "crypto"
 
 interface RegisterDTO {
+  username: string
   email: string
   password: string
 }
@@ -27,10 +34,10 @@ interface LoginDTO {
 class AuthService {
   async register(data: RegisterDTO) {
     try {
-      const { email, password } = data
+      const { email, password, username } = data
 
-      if (!email || !password) {
-        throw new ValidationError("Email and password are required")
+      if (!email || !password || !username) {
+        throw new ValidationError("Name, email and password are required")
       }
 
       if (password.length < 8) {
@@ -53,13 +60,22 @@ class AuthService {
         data: {
           email,
           passwordHash,
+          user: {
+            create: {
+              username,
+            },
+          },
+        },
+
+        include: {
+          user: true,
         },
       })
 
       return {
         id: account.id,
-
         email: account.email,
+        user: account.user,
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -94,20 +110,16 @@ class AuthService {
 
       const refreshToken = generateRefreshToken(account.id)
 
-      await prisma.refreshToken.create({
-        data: {
-          token: refreshToken,
+      const sessionId = crypto.randomUUID()
 
-          accountId: account.id,
-
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        },
-      })
+      await saveRefreshToken(account.id, sessionId, refreshToken)
 
       return {
         accessToken,
 
         refreshToken,
+
+        sessionId,
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -118,44 +130,41 @@ class AuthService {
     }
   }
 
-  async refreshToken(token: string) {
+  async refresh(accountId: string, sessionId: string, token: string) {
     try {
       if (!token) {
         throw new AuthError("Refresh token required")
       }
 
-      const storedToken = await prisma.refreshToken.findUnique({
-        where: {
-          token,
-        },
-
-        include: {
-          account: true,
-        },
-      })
+      const storedToken = await getRefreshToken(accountId, sessionId)
 
       if (!storedToken) {
+        throw new AuthError("Refresh token expired")
+      }
+
+      if (storedToken !== token) {
         throw new AuthError("Invalid refresh token")
       }
 
       verifyRefreshToken(token)
 
-      const accessToken = generateAccessToken(storedToken.accountId)
+      await deleteRefreshToken(accountId, sessionId)
+      const newAccessToken = generateAccessToken(accountId)
+      const newRefreshToken = generateRefreshToken(accountId)
+      await saveRefreshToken(accountId, sessionId, newRefreshToken)
 
       return {
-        accessToken,
+        accessToken: newAccessToken,
+
+        refreshToken: newRefreshToken,
       }
     } catch (error) {
       throw new AuthError("Refresh token expired or invalid")
     }
   }
 
-  async logout(token: string) {
-    await prisma.refreshToken.delete({
-      where: {
-        token,
-      },
-    })
+  async logout(accountId: string, sessionId: string) {
+    await deleteRefreshToken(accountId, sessionId)
 
     return {
       message: "Logged out successfully",

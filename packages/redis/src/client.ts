@@ -1,9 +1,9 @@
 import Redis from "ioredis"
 
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379")
+import { env } from "@workspace/config"
 
-redis.on("connect", () => {
-  console.log("Redis connected")
+const redis = new Redis(env.REDIS_URL, {
+  tls: {},
 })
 
 redis.on("error", (error) => {

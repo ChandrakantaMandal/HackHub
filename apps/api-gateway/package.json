@@ -16,9 +16,10 @@
   "dependencies": {
     "@workspace/logger": "workspace:*",
     "@workspace/error-handler": "workspace:*",
+    "@workspace/config": "workspace:*",
+    "@workspace/utils": "workspace:*",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
     "express": "5",
     "express-http-proxy": "^2.1.2",
     "express-rate-limit": "^8.6.0",

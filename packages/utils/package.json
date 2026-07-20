@@ -1,0 +1,17 @@
+{
+  "name": "@workspace/utils",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "types": "src/index.d.ts",
+  "private": true,
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@workspace/config": "workspace:*",
+    "jsonwebtoken": "^9.0.3"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10"
+  }
+}

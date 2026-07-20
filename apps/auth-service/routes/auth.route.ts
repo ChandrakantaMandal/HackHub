@@ -1,20 +1,12 @@
 import { Router } from "express"
-
-import {
-  register,
-  login,
-  refreshToken,
-  logout,
-} from "../controllers/auth.controller"
+import AuthController from "../controllers/auth.controller"
 
 const router = Router()
 
-router.post("/register", register)
-
-router.post("/login", login)
-
-router.post("/refresh", refreshToken)
-
-router.post("/logout", logout)
+router.post("/register", AuthController.register)
+router.post("/login", AuthController.login)
+router.post("/refresh", AuthController.refresh)
+router.post("/logout", AuthController.logout)
+router.get("/profile", AuthController.profile)
 
 export default router

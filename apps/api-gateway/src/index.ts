@@ -1,25 +1,24 @@
 import express from "express"
-import { env } from "./config/env"
 import cors from "cors"
 import helmet from "helmet"
-import morgan from "morgan"
 import { rateLimit, ipKeyGenerator } from "express-rate-limit"
 import cookieParser from "cookie-parser"
 import proxy from "express-http-proxy"
 import { Request, Response } from "express"
 
-import { logger } from "@workspace/logger"
+import { logger, httpLogger } from "@workspace/logger"
 import { errorMiddleware } from "@workspace/error-handler"
+import { env } from "@workspace/config"
 
 const app = express()
 
 app.use(
   cors({
-    origin: ["http://localhost:3000"],
+    origin: [env.CORS_ORIGIN],
     allowedHeaders: ["Authorization", "Content-Type"],
   })
 )
-app.use(morgan("dev"))
+app.use(httpLogger)
 app.use(express.json({ limit: "100mb" }))
 app.use(express.urlencoded({ limit: "100mb", extended: true }))
 app.use(cookieParser())
@@ -37,18 +36,18 @@ const limiter = rateLimit({
 
 app.use(limiter)
 
-app.get("//getway-health", (req: Request, res: Response) => {
+app.get("/getway-health", (req: Request, res: Response) => {
   res.json({
     service: "api-gateway",
     status: "running",
   })
 })
 
-app.use("/auth", proxy("http://localhost:6001"))
+app.use("/auth", proxy(env.AUTH_SERVICE_URL))
 
 app.use(errorMiddleware)
 
-const server = app.listen(env.PORT, () => {
-  logger.info(`Listening at http://localhost:${env.PORT}/api`)
+const server = app.listen(env.API_GATEWAY_PORT, () => {
+  logger.info(`Listening at http://localhost:${env.API_GATEWAY_PORT}/api`)
 })
 server.on("error", console.error)

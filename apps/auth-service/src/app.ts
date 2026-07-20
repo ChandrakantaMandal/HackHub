@@ -9,12 +9,12 @@ import { errorMiddleware } from "@workspace/error-handler"
 
 const app = express()
 
+app.use(httpLogger)
 app.use(helmet())
 app.use(express.json())
 app.use(cookieParser())
-app.use(httpLogger)
 
-app.use("/auth", authRouter)
+app.use("/", authRouter)
 
 app.use(errorMiddleware)
 

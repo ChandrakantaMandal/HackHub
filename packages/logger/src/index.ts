@@ -1,5 +1,7 @@
-import winston from "winston"
+import * as winston from "winston"
 import DailyRotateFile from "winston-daily-rotate-file"
+import morgan from "morgan"
+import { env } from "@workspace/config"
 
 const { combine, timestamp, colorize, printf, errors, json } = winston.format
 
@@ -36,7 +38,7 @@ const errorRotateTransport = new DailyRotateFile({
 })
 
 export const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || "info",
+  level: env.LOG_LEVEL,
 
   format: combine(
     errors({ stack: true }),
@@ -56,4 +58,10 @@ export const logger = winston.createLogger({
   ],
 })
 
-export * from "./httpLogger"
+export const httpLogger = morgan("combined", {
+  stream: {
+    write: (message: string) => {
+      logger.info(message.trim())
+    },
+  },
+})
