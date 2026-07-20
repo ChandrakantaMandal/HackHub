@@ -1,22 +1,26 @@
 import redis from "./client"
-
 interface RateLimitOptions {
   key: string
   limit: number
   window: number
 }
 
-export async function checkRateLimit(options: RateLimitOptions) {
-  const { key, limit, window } = options
+export async function checkRateLimit({ key, limit, window }: RateLimitOptions) {
+  const namespacedKey = `rate_limit:${key}`
 
-  const current = await redis.incr(key)
+  const current = await redis.incr(namespacedKey)
 
   if (current === 1) {
-    await redis.expire(key, window)
+    await redis.expire(namespacedKey, window)
   }
 
+  const ttl = await redis.ttl(namespacedKey)
+
+  const allowed = current <= limit
+
   return {
-    allowed: current <= limit,
+    allowed,
     remaining: Math.max(limit - current, 0),
+    reset: ttl,
   }
 }

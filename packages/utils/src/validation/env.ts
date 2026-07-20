@@ -23,6 +23,10 @@ export const envSchema = z.object({
 
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
 
+  GMAIL_USER: z.string().email(),
+
+  GMAIL_APP_PASSWORD: z.string(),
+
   LOG_LEVEL: z
     .enum(["error", "warn", "info", "http", "verbose", "debug", "silly"])
     .default("info"),

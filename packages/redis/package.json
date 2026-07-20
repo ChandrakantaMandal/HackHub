@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@workspace/config": "workspace:*",
+    "@workspace/logger": "workspace:*",
     "ioredis": "^5.4.2"
   }
 }

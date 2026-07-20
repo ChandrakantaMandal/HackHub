@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@workspace/config": "workspace:*",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.10"

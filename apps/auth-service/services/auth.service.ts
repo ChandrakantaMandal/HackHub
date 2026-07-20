@@ -7,23 +7,31 @@ import {
   NotFoundError,
   DatabaseError,
 } from "@workspace/error-handler"
-import {
-  saveRefreshToken,
-  getRefreshToken,
-  deleteRefreshToken,
-} from "@workspace/redis"
+
 import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
 } from "@workspace/utils"
 
+import {
+  saveRefreshToken,
+  getRefreshToken,
+  deleteRefreshToken,
+} from "../libs/refreshToken"
+
+import { saveOTP, verifyOTP, generateOTP } from "../libs/otp"
+import { sendOtpEmail } from "../libs/email"
+import { checkRateLimit } from "@workspace/redis"
+
 import crypto from "crypto"
+import { logger } from "@workspace/logger"
 
 interface RegisterDTO {
   username: string
   email: string
   password: string
+  confirmPassword: string
 }
 
 interface LoginDTO {
@@ -31,19 +39,34 @@ interface LoginDTO {
   password: string
 }
 
+interface SendOtpDTO {
+  email: string
+}
+
+type VerifyOtpDTO = {
+  email: string
+  otp: string
+}
+
 class AuthService {
   async register(data: RegisterDTO) {
     try {
-      const { email, password, username } = data
+      const { email, password, username, confirmPassword } = data
 
-      if (!email || !password || !username) {
-        throw new ValidationError("Name, email and password are required")
+      // Validation
+      if (!email || !password || !username || !confirmPassword) {
+        throw new ValidationError("All fields are required")
+      }
+
+      if (password !== confirmPassword) {
+        throw new ValidationError("Passwords do not match")
       }
 
       if (password.length < 8) {
         throw new ValidationError("Password must be at least 8 characters")
       }
 
+      // Check existing account
       const existingAccount = await prisma.account.findUnique({
         where: {
           email,
@@ -54,12 +77,15 @@ class AuthService {
         throw new ConflictError("Email already registered")
       }
 
+      // Hash password
       const passwordHash = await bcrypt.hash(password, 12)
 
+      // Create account
       const account = await prisma.account.create({
         data: {
           email,
           passwordHash,
+
           user: {
             create: {
               username,
@@ -72,10 +98,24 @@ class AuthService {
         },
       })
 
+      // Generate OTP
+      const otp = generateOTP()
+
+      logger.info("Generated Register OTP")
+
+      // Save OTP in Redis
+      await saveOTP(`register:${email}`, otp)
+
+      // Send OTP email (non-blocking — don't await)
+      sendOtpEmail(email, otp).catch((err) => {
+        logger.error("[REGISTER] Failed to send OTP email:", err)
+      })
+
       return {
         id: account.id,
         email: account.email,
         user: account.user,
+        message: "Account created. OTP sent to email",
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -91,13 +131,15 @@ class AuthService {
       const { email, password } = data
 
       const account = await prisma.account.findUnique({
-        where: {
-          email,
-        },
+        where: { email },
       })
 
       if (!account) {
         throw new AuthError("Invalid email or password")
+      }
+
+      if (!account.isVerified) {
+        throw new AuthError("Please verify your email before logging in")
       }
 
       const valid = await bcrypt.compare(password, account.passwordHash)
@@ -107,59 +149,154 @@ class AuthService {
       }
 
       const accessToken = generateAccessToken(account.id)
-
       const refreshToken = generateRefreshToken(account.id)
-
       const sessionId = crypto.randomUUID()
 
       await saveRefreshToken(account.id, sessionId, refreshToken)
 
       return {
         accessToken,
-
         refreshToken,
-
         sessionId,
       }
     } catch (error) {
-      if (error instanceof Error) {
-        throw error
-      }
-
+      if (error instanceof Error) throw error
       throw new DatabaseError("Login failed", error)
     }
   }
 
-  async refresh(accountId: string, sessionId: string, token: string) {
+  async refresh(refreshToken: string, sessionId: string) {
     try {
-      if (!token) {
+      if (!refreshToken) {
         throw new AuthError("Refresh token required")
       }
 
+      const decoded = verifyRefreshToken(refreshToken)
+      const accountId = decoded.id
+
       const storedToken = await getRefreshToken(accountId, sessionId)
 
-      if (!storedToken) {
-        throw new AuthError("Refresh token expired")
-      }
-
-      if (storedToken !== token) {
+      if (!storedToken || storedToken !== refreshToken) {
         throw new AuthError("Invalid refresh token")
       }
 
-      verifyRefreshToken(token)
-
       await deleteRefreshToken(accountId, sessionId)
+
       const newAccessToken = generateAccessToken(accountId)
       const newRefreshToken = generateRefreshToken(accountId)
+
       await saveRefreshToken(accountId, sessionId, newRefreshToken)
 
       return {
         accessToken: newAccessToken,
-
         refreshToken: newRefreshToken,
       }
     } catch (error) {
+      if (error instanceof Error) throw error
       throw new AuthError("Refresh token expired or invalid")
+    }
+  }
+
+  async sendOtp(
+    data: SendOtpDTO & { purpose: "register" | "login" | "reset" }
+  ) {
+    const { email, purpose } = data
+
+    if (!email) {
+      throw new ValidationError("Email is required")
+    }
+
+    const rate = await checkRateLimit({
+      key: `otp:${email}`,
+      limit: 3,
+      window: 300,
+    })
+
+    if (!rate.allowed) {
+      throw new AuthError(`Too many requests. Try again in ${rate.reset}s`)
+    }
+
+    if (purpose !== "register") {
+      const account = await prisma.account.findUnique({ where: { email } })
+      if (!account) {
+        return { message: "OTP sent if account exists" }
+      }
+    }
+
+    const otp = generateOTP()
+
+    await saveOTP(`${purpose}:${email}`, otp)
+
+    // Send OTP email (non-blocking — don't await)
+    sendOtpEmail(email, otp).catch((err) => {
+      logger.error("[SEND_OTP] Failed to send OTP email:", err)
+    })
+
+    return {
+      message: "OTP sent successfully",
+    }
+  }
+
+  async verifyOtp(
+    data: VerifyOtpDTO & { purpose: "register" | "login" | "reset" }
+  ) {
+    const { email, otp, purpose } = data
+
+    if (!email || !otp) {
+      throw new ValidationError("Email and OTP are required")
+    }
+
+    const isValid = await verifyOTP(`${purpose}:${email}`, otp)
+
+    if (!isValid) {
+      throw new AuthError("Invalid or expired OTP")
+    }
+
+    if (purpose === "register") {
+      await prisma.account.update({
+        where: { email },
+        data: { isVerified: true },
+      })
+    }
+
+    return {
+      message: "OTP verified",
+    }
+  }
+
+  async resetPassword(
+    email: string,
+    newPassword: string,
+    confirmPassword: string,
+    otp: string
+  ) {
+    if (newPassword !== confirmPassword) {
+      throw new ValidationError("Passwords do not match")
+    }
+
+    const isValid = await verifyOTP(`reset:${email}`, otp)
+
+    if (!isValid) {
+      throw new AuthError("Invalid or expired OTP")
+    }
+
+    const account = await prisma.account.findUnique({
+      where: { email },
+    })
+
+    if (!account) {
+      throw new NotFoundError("Account not found")
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12)
+
+    await prisma.account.update({
+      where: { email },
+      data: { passwordHash },
+    })
+
+    return {
+      message: "Password reset successful",
     }
   }
 
@@ -173,13 +310,8 @@ class AuthService {
 
   async getProfile(accountId: string) {
     const account = await prisma.account.findUnique({
-      where: {
-        id: accountId,
-      },
-
-      include: {
-        user: true,
-      },
+      where: { id: accountId },
+      include: { user: true },
     })
 
     if (!account) {
@@ -188,9 +320,7 @@ class AuthService {
 
     return {
       id: account.id,
-
       email: account.email,
-
       user: account.user,
     }
   }

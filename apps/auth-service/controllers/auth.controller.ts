@@ -6,7 +6,7 @@ class AuthController {
     try {
       const result = await AuthService.register(req.body)
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         data: result,
       })
@@ -19,8 +19,9 @@ class AuthController {
     try {
       const result = await AuthService.login(req.body)
 
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
+        message: "Login successful",
         data: result,
       })
     } catch (error) {
@@ -30,16 +31,20 @@ class AuthController {
 
   async refresh(req: Request, res: Response, next: NextFunction) {
     try {
-      const { accountId, sessionId, refreshToken } = req.body
+      const { refreshToken, sessionId } = req.body
 
-      const result = await AuthService.refresh(
-        accountId,
-        sessionId,
-        refreshToken
-      )
+      if (!refreshToken || !sessionId) {
+        return res.status(400).json({
+          success: false,
+          message: "Refresh token and session ID are required",
+        })
+      }
 
-      res.status(200).json({
+      const result = await AuthService.refresh(refreshToken, sessionId)
+
+      return res.status(200).json({
         success: true,
+        message: "Token refreshed",
         data: result,
       })
     } catch (error) {
@@ -49,13 +54,21 @@ class AuthController {
 
   async logout(req: Request, res: Response, next: NextFunction) {
     try {
-      const { accountId, sessionId } = req.body
+      const user = (req as any).user
+      const { sessionId } = req.body
 
-      const result = await AuthService.logout(accountId, sessionId)
+      if (!sessionId) {
+        return res.status(400).json({
+          success: false,
+          message: "Session ID is required",
+        })
+      }
 
-      res.status(200).json({
+      await AuthService.logout(user.id, sessionId)
+
+      return res.status(200).json({
         success: true,
-        data: result,
+        message: "Logged out successfully",
       })
     } catch (error) {
       next(error)
@@ -64,11 +77,37 @@ class AuthController {
 
   async profile(req: Request, res: Response, next: NextFunction) {
     try {
-      const accountId = (req as any).user.id
+      const user = (req as any).user
 
-      const result = await AuthService.getProfile(accountId)
+      const result = await AuthService.getProfile(user.id)
 
-      res.status(200).json({
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async verifyOtp(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await AuthService.verifyOtp(req.body)
+
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async sendOtp(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await AuthService.sendOtp(req.body)
+
+      return res.status(200).json({
         success: true,
         data: result,
       })
