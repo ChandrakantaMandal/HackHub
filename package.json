@@ -15,7 +15,6 @@
     "db:studio": "pnpm --filter @workspace/database db:studio"
   },
   "devDependencies": {
-    "@types/morgan": "^1.9.10",
     "@types/node": "^26.1.1",
     "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.60.0",
@@ -32,9 +31,6 @@
   "packageManager": "pnpm@10.33.4",
   "engines": {
     "node": ">=20"
-  },
-  "dependencies": {
-    "morgan": "^1.11.0"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
