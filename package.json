@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "dotenv -e .env -- turbo dev",
+    "dev": " turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
     "format": "turbo format",

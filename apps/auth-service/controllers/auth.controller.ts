@@ -64,7 +64,7 @@ class AuthController {
 
   async profile(req: Request, res: Response, next: NextFunction) {
     try {
-      const accountId = (req as any).user.id // from auth middleware
+      const accountId = (req as any).user.id
 
       const result = await AuthService.getProfile(accountId)
 

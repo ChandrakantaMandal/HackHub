@@ -204,7 +204,11 @@ importers:
         specifier: ^5
         version: 5.9.3
 
-  packages/config: {}
+  packages/config:
+    dependencies:
+      '@workspace/utils':
+        specifier: workspace:*
+        version: link:../utils
 
   packages/database:
     dependencies:

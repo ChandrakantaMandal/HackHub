@@ -9,5 +9,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@workspace/utils": "workspace:*"
   }
 }
