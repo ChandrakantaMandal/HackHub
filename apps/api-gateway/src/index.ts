@@ -8,6 +8,8 @@ import cookieParser from "cookie-parser";
 import proxy from "express-http-proxy";
 import { Request,Response } from "express";
 
+import { logger } from "@workspace/logger";
+
 
 const app = express();
 
@@ -36,17 +38,17 @@ const limiter = rateLimit({
 
 app.use(limiter);
 
-app.get("/", (req: Request, res: Response) => {
+app.get("//getway-health", (req: Request, res: Response) => {
   res.json({
     service: "api-gateway",
     status: "running",
   })
 })
 
-app.use("/",proxy("http://localhost:6001"))
+app.use("/auth",proxy("http://localhost:6001"))
 
 const server = app.listen(env.PORT, () => {
-  console.log(`Listening at http://localhost:${env.PORT}/api`);
+  logger.info(`Listening at http://localhost:${env.PORT}/api`);
 });
 server.on("error", console.error);
 
