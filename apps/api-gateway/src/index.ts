@@ -1,31 +1,30 @@
-import express from "express";
-import { env } from "./config/env";
-import cors from "cors";
-import helmet from "helmet";
-import morgan from "morgan";
-import {rateLimit, ipKeyGenerator} from "express-rate-limit";
-import cookieParser from "cookie-parser";
-import proxy from "express-http-proxy";
-import { Request,Response } from "express";
+import express from "express"
+import { env } from "./config/env"
+import cors from "cors"
+import helmet from "helmet"
+import morgan from "morgan"
+import { rateLimit, ipKeyGenerator } from "express-rate-limit"
+import cookieParser from "cookie-parser"
+import proxy from "express-http-proxy"
+import { Request, Response } from "express"
 
-import { logger } from "@workspace/logger";
+import { logger } from "@workspace/logger"
+import { errorMiddleware } from "@workspace/error-handler"
 
+const app = express()
 
-const app = express();
-
-
-
-app.use(cors({
+app.use(
+  cors({
     origin: ["http://localhost:3000"],
     allowedHeaders: ["Authorization", "Content-Type"],
-  }))
+  })
+)
 app.use(morgan("dev"))
-app.use(express.json({limit: "100mb"}))
-app.use(express.urlencoded({limit: "100mb", extended: true }))
+app.use(express.json({ limit: "100mb" }))
+app.use(express.urlencoded({ limit: "100mb", extended: true }))
 app.use(cookieParser())
 app.use(helmet())
-app.set("trust proxy", 1);
-
+app.set("trust proxy", 1)
 
 const limiter = rateLimit({
   windowMs: 10 * 60 * 1000,
@@ -34,9 +33,9 @@ const limiter = rateLimit({
   legacyHeaders: true,
   standardHeaders: true,
   keyGenerator: (req) => ipKeyGenerator(req.ip!) ?? "unknown",
-});
+})
 
-app.use(limiter);
+app.use(limiter)
 
 app.get("//getway-health", (req: Request, res: Response) => {
   res.json({
@@ -45,10 +44,11 @@ app.get("//getway-health", (req: Request, res: Response) => {
   })
 })
 
-app.use("/auth",proxy("http://localhost:6001"))
+app.use("/auth", proxy("http://localhost:6001"))
+
+app.use(errorMiddleware)
 
 const server = app.listen(env.PORT, () => {
-  logger.info(`Listening at http://localhost:${env.PORT}/api`);
-});
-server.on("error", console.error);
-
+  logger.info(`Listening at http://localhost:${env.PORT}/api`)
+})
+server.on("error", console.error)
