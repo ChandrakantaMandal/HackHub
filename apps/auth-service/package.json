@@ -14,6 +14,7 @@
     "@workspace/database": "workspace:*",
     "@workspace/error-handler": "workspace:*",
     "@workspace/logger": "workspace:*",
+    "@workspace/redis": "workspace:*",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
