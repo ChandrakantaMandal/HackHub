@@ -1,5 +1,6 @@
 import { Response, NextFunction } from "express"
 import { verifyAccessToken } from "@workspace/utils"
+import { env } from "@workspace/config"
 
 export const verifyToken = (req: any, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization
@@ -21,7 +22,7 @@ export const verifyToken = (req: any, res: Response, next: NextFunction) => {
   }
 
   try {
-    const payload = verifyAccessToken(token)
+    const payload = verifyAccessToken(token, env.ACCESS_SECRET)
     req.user = payload
     next()
   } catch {

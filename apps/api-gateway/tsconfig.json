@@ -3,9 +3,9 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
+    "declaration": false,
+    "declarationMap": false,
     "tsBuildInfoFile": ".tsbuildinfo"
   },
-  "include": [
-    "src"
-  ]
+  "include": ["src"]
 }

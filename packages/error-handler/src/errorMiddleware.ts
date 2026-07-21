@@ -24,17 +24,17 @@ export const errorMiddleware = (
         details: err.details,
       }),
     })
-
-    logger.error({
-      message: err.message,
-      stack: err.stack,
-      path: req.originalUrl,
-      method: req.method,
-    })
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error. Please try again later.",
-    })
   }
+
+  logger.error({
+    message: err.message,
+    stack: err.stack,
+    path: req.originalUrl,
+    method: req.method,
+  })
+
+  return res.status(500).json({
+    success: false,
+    message: "Internal server error. Please try again later.",
+  })
 }

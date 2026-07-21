@@ -13,6 +13,7 @@ import {
   generateRefreshToken,
   verifyRefreshToken,
 } from "@workspace/utils"
+import { env } from "@workspace/config"
 
 import {
   saveRefreshToken,
@@ -148,8 +149,8 @@ class AuthService {
         throw new AuthError("Invalid email or password")
       }
 
-      const accessToken = generateAccessToken(account.id)
-      const refreshToken = generateRefreshToken(account.id)
+      const accessToken = generateAccessToken(account.id, env.ACCESS_SECRET)
+      const refreshToken = generateRefreshToken(account.id, env.REFRESH_SECRET)
       const sessionId = crypto.randomUUID()
 
       await saveRefreshToken(account.id, sessionId, refreshToken)
@@ -171,7 +172,7 @@ class AuthService {
         throw new AuthError("Refresh token required")
       }
 
-      const decoded = verifyRefreshToken(refreshToken)
+      const decoded = verifyRefreshToken(refreshToken, env.REFRESH_SECRET)
       const accountId = decoded.id
 
       const storedToken = await getRefreshToken(accountId, sessionId)
@@ -182,8 +183,11 @@ class AuthService {
 
       await deleteRefreshToken(accountId, sessionId)
 
-      const newAccessToken = generateAccessToken(accountId)
-      const newRefreshToken = generateRefreshToken(accountId)
+      const newAccessToken = generateAccessToken(accountId, env.ACCESS_SECRET)
+      const newRefreshToken = generateRefreshToken(
+        accountId,
+        env.REFRESH_SECRET
+      )
 
       await saveRefreshToken(accountId, sessionId, newRefreshToken)
 

@@ -150,6 +150,9 @@ importers:
       nodemailer:
         specifier: ^9.0.3
         version: 9.0.3
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/bcrypt':
         specifier: ^6.0.0
@@ -212,15 +215,9 @@ importers:
 
   packages/config:
     dependencies:
-      '@workspace/logger':
-        specifier: workspace:*
-        version: link:../logger
       '@workspace/typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
-      '@workspace/utils':
-        specifier: workspace:*
-        version: link:../utils
 
   packages/database:
     dependencies:
@@ -409,9 +406,6 @@ importers:
 
   packages/utils:
     dependencies:
-      '@workspace/config':
-        specifier: workspace:*
-        version: link:../config
       jsonwebtoken:
         specifier: ^9.0.3
         version: 9.0.3

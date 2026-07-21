@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express"
 import { verifyAccessToken } from "@workspace/utils"
+import { env } from "@workspace/config"
 
 export interface AuthRequest extends Request {
   user?: any
@@ -16,7 +17,7 @@ export const authMiddleware = (req: any, res: Response, next: NextFunction) => {
     return res.status(401).json({ error: "Token missing" })
   }
   try {
-    const payload = verifyAccessToken(token)
+    const payload = verifyAccessToken(token, env.ACCESS_SECRET)
     req.user = payload
     next()
   } catch {

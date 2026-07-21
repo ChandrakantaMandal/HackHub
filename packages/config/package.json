@@ -11,8 +11,6 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@workspace/utils": "workspace:*",
-    "@workspace/typescript-config": "workspace:*",
-    "@workspace/logger": "workspace:*"
+    "@workspace/typescript-config": "workspace:*"
   }
 }
