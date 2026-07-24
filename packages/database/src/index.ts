@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient, Prisma } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { env } from "@workspace/config"
 
@@ -22,4 +22,5 @@ if (env.NODE_ENV !== "production") {
   globalThis.prismaGlobal = prisma
 }
 
+export { Prisma }
 export default prisma

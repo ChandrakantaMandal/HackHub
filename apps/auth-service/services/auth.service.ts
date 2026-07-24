@@ -1,5 +1,5 @@
 import bcrypt from "bcrypt"
-import prisma from "@workspace/database"
+import prisma, { Prisma } from "@workspace/database"
 import {
   ConflictError,
   ValidationError,
@@ -78,6 +78,16 @@ class AuthService {
         throw new ConflictError("Email already registered")
       }
 
+      const existingUser = await prisma.user.findUnique({
+        where: {
+          username,
+        },
+      })
+
+      if (existingUser) {
+        throw new ConflictError("Username already taken")
+      }
+
       // Hash password
       const passwordHash = await bcrypt.hash(password, 12)
 
@@ -120,6 +130,19 @@ class AuthService {
       }
     } catch (error) {
       if (error instanceof Error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          const target = (error.meta?.target as string[]) ?? []
+          if (target.includes("email")) {
+            throw new ConflictError("Email already registered")
+          }
+          if (target.includes("username")) {
+            throw new ConflictError("Username already taken")
+          }
+          throw new ConflictError("Account already exists")
+        }
         throw error
       }
 

@@ -15,14 +15,14 @@ const app = express()
 app.use(
   cors({
     origin: [env.CORS_ORIGIN],
+    credentials: true,
     allowedHeaders: ["Authorization", "Content-Type"],
+    exposedHeaders: ["Set-Cookie"],
   })
 )
 app.use(httpLogger)
-app.use(express.json({ limit: "100mb" }))
-app.use(express.urlencoded({ limit: "100mb", extended: true }))
 app.use(cookieParser())
-app.use(helmet())
+app.use(helmet({ crossOriginResourcePolicy: false }))
 app.set("trust proxy", 1)
 
 const limiter = rateLimit({
@@ -43,7 +43,17 @@ app.get("/getway-health", (req: Request, res: Response) => {
   })
 })
 
-app.use("/auth", proxy(env.AUTH_SERVICE_URL))
+app.use(
+  "/api/auth",
+  proxy(env.AUTH_SERVICE_URL, {
+    parseReqBody: false,
+    userResDecorator: (_proxyRes, proxyResData, userReq, userRes) => {
+      userRes.setHeader("Access-Control-Allow-Origin", env.CORS_ORIGIN)
+      userRes.setHeader("Access-Control-Allow-Credentials", "true")
+      return proxyResData
+    },
+  })
+)
 
 app.use(errorMiddleware)
 

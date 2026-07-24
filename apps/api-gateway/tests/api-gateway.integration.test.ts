@@ -28,9 +28,15 @@ vi.mock("@workspace/error-handler", () => ({
 
 vi.mock("express-http-proxy", () => {
   return {
-    default: (target: string) => {
+    default: (target: string, opts?: any) => {
       return (req: any, res: any, next: any) => {
-        res.json({ proxied: true, target, path: req.path })
+        res.json({
+          proxied: true,
+          target,
+          path: req.path,
+          method: req.method,
+          parseReqBody: opts?.parseReqBody,
+        })
       }
     },
   }
@@ -55,9 +61,9 @@ describe("api-gateway", () => {
     })
   })
 
-  describe("GET /auth/* (proxy)", () => {
-    it("should proxy /auth requests to AUTH_SERVICE_URL", async () => {
-      const res = await request(app).get("/auth/login")
+  describe("GET /api/auth/* (proxy)", () => {
+    it("should proxy /api/auth requests to AUTH_SERVICE_URL", async () => {
+      const res = await request(app).get("/api/auth/login")
 
       expect(res.status).toBe(200)
       expect(res.body.proxied).toBe(true)

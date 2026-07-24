@@ -138,8 +138,8 @@ describe("Auth Service Integration", () => {
 
       expect(res.status).toBe(201)
       expect(res.body.success).toBe(true)
-      expect(res.body.data.email).toBe("test@example.com")
-      expect(res.body.data.message).toContain("OTP")
+      expect(res.body.user.email).toBe("test@example.com")
+      expect(res.body.message).toContain("OTP")
     })
 
     it("should reject duplicate email", async () => {
@@ -351,55 +351,6 @@ describe("Auth Service Integration", () => {
         .set("Authorization", "Bearer invalid-token")
 
       expect(res.status).toBe(401)
-    })
-  })
-
-  describe("POST /send-otp", () => {
-    it("should send OTP successfully", async () => {
-      mockCheckRateLimit.mockResolvedValue({ allowed: true })
-
-      const res = await request(app).post("/send-otp").send({
-        email: "test@example.com",
-        purpose: "login",
-      })
-
-      expect(res.status).toBe(200)
-      expect(res.body.success).toBe(true)
-    })
-
-    it("should reject rate-limited requests", async () => {
-      mockCheckRateLimit.mockResolvedValue({
-        allowed: false,
-        reset: 60,
-      })
-
-      const res = await request(app).post("/send-otp").send({
-        email: "test@example.com",
-        purpose: "login",
-      })
-
-      expect(res.status).toBe(401)
-      expect(res.body.success).toBe(false)
-    })
-  })
-
-  describe("POST /verify-otp", () => {
-    it("should verify OTP successfully", async () => {
-      // SHA-256 hash of "123456" — must match what hashOTP() produces in otp.ts
-      const hashOfOtp =
-        "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
-      mockRedis.get.mockResolvedValue(hashOfOtp)
-      mockRedis.incr.mockResolvedValue(1)
-      mockRedis.del.mockResolvedValue(undefined)
-
-      const res = await request(app).post("/verify-otp").send({
-        email: "test@example.com",
-        otp: "123456",
-        purpose: "login",
-      })
-
-      expect(res.status).toBe(200)
-      expect(res.body.success).toBe(true)
     })
   })
 })

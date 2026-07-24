@@ -115,6 +115,26 @@ class AuthController {
       next(error)
     }
   }
+
+  async resetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { email, otp, newPassword, confirmPassword } = req.body
+
+      const result = await AuthService.resetPassword(
+        email,
+        newPassword,
+        confirmPassword,
+        otp
+      )
+
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
 }
 
 export default new AuthController()
