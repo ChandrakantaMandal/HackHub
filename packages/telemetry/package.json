@@ -1,0 +1,15 @@
+{
+  "name": "@workspace/telemetry",
+  "version": "1.0.0",
+  "main": "src/tracing.ts",
+  "types": "src/tracing.ts",
+  "dependencies": {
+    "@opentelemetry/api": "^1.8.0",
+    "@opentelemetry/sdk-node": "^0.50.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.49.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.50.0"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

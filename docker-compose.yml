@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    container_name: lgtm-stack
+    ports:
+      - "3000:3000" # Grafana UI
+      - "4317:4317" # OTLP gRPC receiver (traces, metrics, logs)
+      - "4318:4318" # OTLP HTTP receiver (traces, metrics, logs)
+      - "3100:3100" # Loki
+      - "9090:9090" # Prometheus / Mimir
+    environment:
+      - OTEL_SERVICE_NAME=lgtm-stack
+    networks:
+      - lgtm-net
+
+networks:
+  lgtm-net:
+    driver: bridge

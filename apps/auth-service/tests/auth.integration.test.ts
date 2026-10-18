@@ -72,10 +72,14 @@ vi.mock("@workspace/logger", () => ({
   httpLogger: vi.fn((req: any, res: any, next: any) => next()),
 }))
 
-vi.mock("@workspace/database", () => ({
-  default: mockPrisma,
-  PrismaClient: vi.fn().mockImplementation(() => mockPrisma),
-}))
+vi.mock("@workspace/database", () => {
+  class PrismaClientKnownRequestError extends Error {}
+  return {
+    default: mockPrisma,
+    PrismaClient: vi.fn().mockImplementation(() => mockPrisma),
+    Prisma: { PrismaClientKnownRequestError },
+  }
+})
 
 vi.mock("@workspace/redis", () => ({
   redis: mockRedis,
@@ -138,8 +142,8 @@ describe("Auth Service Integration", () => {
 
       expect(res.status).toBe(201)
       expect(res.body.success).toBe(true)
-      expect(res.body.user.email).toBe("test@example.com")
-      expect(res.body.message).toContain("OTP")
+      expect(res.body.data.email).toBe("test@example.com")
+      expect(res.body.data.message).toContain("OTP")
     })
 
     it("should reject duplicate email", async () => {

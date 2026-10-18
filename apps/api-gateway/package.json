@@ -17,6 +17,7 @@
     "@workspace/logger": "workspace:*",
     "@workspace/error-handler": "workspace:*",
     "@workspace/config": "workspace:*",
+    "@workspace/telemetry": "workspace:*",
     "@workspace/utils": "workspace:*",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",

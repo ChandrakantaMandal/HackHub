@@ -1,60 +1,51 @@
 import * as winston from "winston"
-import DailyRotateFile from "winston-daily-rotate-file"
 import morgan from "morgan"
 import { env } from "@workspace/config"
+import { trace, context } from "@opentelemetry/api"
 
-const { combine, timestamp, colorize, printf, errors, json } = winston.format
+const { combine, timestamp, printf, errors, json } = winston.format
 
-const logFormat = printf(({ level, message, timestamp, stack }) => {
-  if (stack) {
-    return `[${timestamp}] ${level}: ${stack}`
+// Injects OpenTelemetry Trace ID & Span ID into log metadata
+const otelFormat = winston.format((info) => {
+  const span = trace.getSpan(context.active())
+  if (span) {
+    const spanContext = span.spanContext()
+    info.trace_id = spanContext.traceId
+    info.span_id = spanContext.spanId
   }
-
-  return `[${timestamp}] ${level}: ${message}`
+  return info
 })
 
-const fileRotateTransport = new DailyRotateFile({
-  dirname: "logs",
-  filename: "application-%DATE%.log",
-  datePattern: "YYYY-MM-DD",
-
-  maxSize: "20m",
-  maxFiles: "14d",
-
-  zippedArchive: true,
-})
-
-const errorRotateTransport = new DailyRotateFile({
-  dirname: "logs",
-  filename: "error-%DATE%.log",
-  datePattern: "YYYY-MM-DD",
-
-  level: "error",
-
-  maxSize: "20m",
-  maxFiles: "30d",
-
-  zippedArchive: true,
-})
+const consoleFormat = printf(
+  ({ level, message, timestamp, stack, trace_id, span_id, ...meta }) => {
+    const logMessage = stack || message
+    // If running in development, print a readable string; production can rely purely on JSON
+    return JSON.stringify({
+      timestamp,
+      level,
+      message: logMessage,
+      trace_id,
+      span_id,
+      ...meta,
+    })
+  }
+)
 
 export const logger = winston.createLogger({
-  level: env.LOG_LEVEL,
-
+  level: env.LOG_LEVEL || "info",
   format: combine(
     errors({ stack: true }),
-    timestamp({
-      format: "YYYY-MM-DD HH:mm:ss",
-    }),
-    logFormat
+    timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+    otelFormat(),
+    json() // Outputs strict JSON to stdout for Loki / OTel Collector
   ),
-
   transports: [
     new winston.transports.Console({
-      format: combine(colorize(), timestamp(), logFormat),
+      format:
+        env.NODE_ENV === "production"
+          ? combine(timestamp(), otelFormat(), json())
+          : combine(timestamp(), otelFormat(), consoleFormat),
     }),
-
-    fileRotateTransport,
-    errorRotateTransport,
   ],
 })
 

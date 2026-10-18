@@ -13,16 +13,13 @@ node_modules
 # testing
 coverage
 
-# next.js
-.next/
+# build output (never commit)
+build/
+dist/
 out/
-
-# production
-build
-dist
-
-# turbo
-.turbo
+.next/
+.turbo/
+*.tsbuildinfo
 
 # misc
 .DS_Store
@@ -41,6 +38,5 @@ yarn-error.log*
 .vercel
 
 # typescript
-*.tsbuildinfo
 next-env.d.ts
 logs

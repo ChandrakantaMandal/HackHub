@@ -22,6 +22,10 @@ export const envSchema = z.object({
 
   AUTH_SERVICE_URL: z.string().url().default("http://localhost:6001"),
 
+  PROJECT_SERVICE_PORT: z.coerce.number().default(5002),
+
+  PROJECT_SERVICE_URL: z.string().url().default("http://localhost:5002"),
+
   API_URL: z.string().url().default("http://localhost:4000"),
 
   CORS_ORIGIN: z.string().default("http://localhost:3000"),

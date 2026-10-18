@@ -19,6 +19,7 @@
     "@workspace/error-handler": "workspace:*",
     "@workspace/logger": "workspace:*",
     "@workspace/redis": "workspace:*",
+    "@workspace/telemetry": "workspace:*",
     "@workspace/utils": "workspace:*",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",

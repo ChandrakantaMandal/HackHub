@@ -49,9 +49,9 @@ describe("api-gateway", () => {
     vi.clearAllMocks()
   })
 
-  describe("GET /getway-health", () => {
-    it("should return service status", async () => {
-      const res = await request(app).get("/getway-health")
+  describe("GET /gateway-health", () => {
+    it("should return health status", async () => {
+      const res = await request(app).get("/gateway-health")
 
       expect(res.status).toBe(200)
       expect(res.body).toEqual({
