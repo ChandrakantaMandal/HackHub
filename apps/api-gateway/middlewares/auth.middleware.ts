@@ -62,3 +62,16 @@ export const judgeRouteGuard = (
   }
   return authMiddleware(req, res, next)
 }
+
+// Showcase: all GETs are public (list/detail/comments/leaderboard/stats);
+// mutations (POST like/comment) require a valid token.
+export const showcaseRouteGuard = (
+  req: any,
+  res: Response,
+  next: NextFunction
+) => {
+  if (req.method === "GET") {
+    return next()
+  }
+  return authMiddleware(req, res, next)
+}

@@ -14,6 +14,7 @@ import {
   authMiddleware,
   authRouteGuard,
   judgeRouteGuard,
+  showcaseRouteGuard,
 } from "../middlewares/auth.middleware"
 
 const app = express()
@@ -110,11 +111,30 @@ app.use(
   })
 )
 
-// 4. Showcase Service Routes (Protected by gateway authMiddleware)
+// 4. Showcase Service Routes (GETs public; POST like/comment require a token)
 app.use(
   "/api/showcase",
-  authMiddleware,
+  showcaseRouteGuard,
   proxy(env.SHOWCASE_SERVICE_URL || "http://localhost:5004", {
+    parseReqBody: false,
+    proxyReqPathResolver: (req) => {
+      return req.originalUrl
+    },
+    userResDecorator: (_proxyRes, proxyResData, _userReq, userRes) => {
+      userRes.setHeader("Access-Control-Allow-Origin", env.CORS_ORIGIN)
+      userRes.setHeader("Access-Control-Allow-Credentials", "true")
+      return proxyResData
+    },
+  })
+)
+
+// 5. Chat Service Routes (all REST routes require a valid token; WebSocket
+// upgrades are proxied in src/index.ts — the chat service verifies the JWT
+// itself at the Socket.io handshake)
+app.use(
+  "/api/chat",
+  authMiddleware,
+  proxy(env.CHAT_SERVICE_URL || "http://localhost:5005", {
     parseReqBody: false,
     proxyReqPathResolver: (req) => {
       return req.originalUrl

@@ -179,6 +179,58 @@ describe("api-gateway", () => {
     })
   })
 
+  describe("showcase route guard", () => {
+    it("should proxy GET /api/showcase without a token (public listing)", async () => {
+      const res = await request(app).get("/api/showcase")
+
+      expect(res.status).toBe(200)
+      expect(res.body.proxied).toBe(true)
+      expect(res.body.target).toBe("http://localhost:5004")
+      expect(res.body.path).toBe("/")
+      expect(res.body.method).toBe("GET")
+    })
+
+    it("should proxy GET /api/showcase/leaderboard without a token", async () => {
+      const res = await request(app).get("/api/showcase/leaderboard")
+
+      expect(res.status).toBe(200)
+      expect(res.body.proxied).toBe(true)
+      expect(res.body.path).toBe("/leaderboard")
+    })
+
+    it("should reject POST /api/showcase/:id/like without a token", async () => {
+      const res = await request(app).post("/api/showcase/p1/like")
+
+      expect(res.status).toBe(401)
+      expect(res.body.error).toBe("Unauthorized")
+    })
+
+    it("should reject POST /api/showcase/:id/comment without a token", async () => {
+      const res = await request(app)
+        .post("/api/showcase/p1/comment")
+        .send({ message: "nice" })
+
+      expect(res.status).toBe(401)
+      expect(res.body.error).toBe("Unauthorized")
+    })
+
+    it("should proxy POST /api/showcase/:id/like with a token", async () => {
+      const { generateAccessToken } =
+        await import("@workspace/utils/src/jwt/jwt")
+      const token = `Bearer ${generateAccessToken("user-1", "test-access-secret", "PARTICIPANT")}`
+
+      const res = await request(app)
+        .post("/api/showcase/p1/like")
+        .set("Authorization", token)
+
+      expect(res.status).toBe(200)
+      expect(res.body.proxied).toBe(true)
+      expect(res.body.target).toBe("http://localhost:5004")
+      expect(res.body.path).toBe("/p1/like")
+      expect(res.body.method).toBe("POST")
+    })
+  })
+
   describe("unknown routes", () => {
     it("should return 404 for unknown routes", async () => {
       const res = await request(app).get("/unknown-route")

@@ -1,0 +1,27 @@
+{
+  "name": "showcase-service",
+  "version": "1.0.0",
+  "description": "HackHub Public Project Showcase Service",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@workspace/config": "workspace:*",
+    "@workspace/database": "workspace:*",
+    "@workspace/error-handler": "workspace:*",
+    "@workspace/logger": "workspace:*",
+    "@workspace/utils": "workspace:*",
+    "@workspace/telemetry": "workspace:*",
+    "express": "^5.2.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "tsx": "^4.23.1",
+    "typescript": "^5"
+  }
+}

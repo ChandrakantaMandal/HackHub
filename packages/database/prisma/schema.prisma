@@ -39,6 +39,7 @@ model User {
   updatedAt  DateTime     @updatedAt
   judge      Judge?
   awardedBadges AchievementBadge[]
+  sentMessages Message[]
 }
 
 enum UserRole {
@@ -285,4 +286,33 @@ enum BadgeType {
   BEST_TECH
   COMMUNITY_FAVORITE
   SPECIAL
+}
+
+// =====================
+// CHAT
+// =====================
+enum RoomType {
+  TEAM
+  JUDGE
+  DIRECT
+}
+
+model Room {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  type      RoomType
+  messages  Message[]
+  createdAt DateTime  @default(now())
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([roomId, createdAt])
 }

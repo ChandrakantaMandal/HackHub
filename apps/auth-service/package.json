@@ -22,15 +22,12 @@
     "@workspace/telemetry": "workspace:*",
     "@workspace/utils": "workspace:*",
     "bcrypt": "^6.0.0",
-    "cookie-parser": "^1.4.7",
     "express": "^5.2.1",
-    "helmet": "^8.3.0",
     "nodemailer": "^9.0.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
-    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/nodemailer": "^8.0.1"
   }
