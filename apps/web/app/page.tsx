@@ -7,7 +7,6 @@ import {
   Users,
   BarChart3,
   Eye,
-  MessageSquareCode,
   CheckCircle2,
   ArrowRight,
   Sparkles,
@@ -47,12 +46,6 @@ const features: Feature[] = [
     title: "Project Showcase",
     description:
       "Display your final projects in a public, high-visibility gallery for everyone to see.",
-  },
-  {
-    icon: MessageSquareCode,
-    title: "Judge Scoring",
-    description:
-      "Streamlined rubrics allowing judges to score submissions and declare winners seamlessly.",
   },
   {
     icon: CheckCircle2,
@@ -113,12 +106,6 @@ export default function LandingPage() {
               className="hidden text-slate-300 transition-colors hover:text-white sm:block"
             >
               Showcase
-            </Link>
-            <Link
-              href="/judge/login"
-              className="hidden text-slate-300 transition-colors hover:text-white sm:block"
-            >
-              Join as Judge
             </Link>
             <Button
               render={<Link href="/signup" />}
@@ -196,7 +183,7 @@ export default function LandingPage() {
             >
               The ultimate workspace for hackathon teams to organize tasks,
               track real-time progress, and present game-changing projects to
-              global judges.
+              the world.
             </motion.p>
 
             <motion.div

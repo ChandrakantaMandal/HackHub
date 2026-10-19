@@ -9,7 +9,12 @@ interface AuthState {
   user: {
     id: string
     email: string
-    user: { username: string }
+    user: {
+      username: string
+      role?: "PARTICIPANT" | "JUDGE" | "ADMIN"
+      name?: string | null
+      avatar?: string | null
+    }
   } | null
 
   isLoading: boolean
