@@ -26,6 +26,20 @@ export const envSchema = z.object({
 
   PROJECT_SERVICE_URL: z.string().url().default("http://localhost:5002"),
 
+  JUDGE_SERVICE_PORT: z.coerce.number().default(5003),
+
+  JUDGE_SERVICE_URL: z.string().url().default("http://localhost:5003"),
+
+  SHOWCASE_SERVICE_PORT: z.coerce.number().default(5004),
+
+  SHOWCASE_SERVICE_URL: z.string().url().default("http://localhost:5004"),
+
+  CHAT_SERVICE_PORT: z.coerce.number().default(5005),
+
+  CHAT_SERVICE_URL: z.string().url().default("http://localhost:5005"),
+
+  JUDGE_CODES: z.string().default(""),
+
   API_URL: z.string().url().default("http://localhost:4000"),
 
   CORS_ORIGIN: z.string().default("http://localhost:3000"),

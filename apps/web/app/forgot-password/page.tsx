@@ -25,6 +25,7 @@ import {
 import { Button } from "@workspace/ui/components/button"
 
 import { useAppStore } from "../../store/useAppStore"
+import { useHydrated } from "../../lib/useHydrated"
 
 const ForgotPasswordPage = () => {
   const router = useRouter()
@@ -36,21 +37,17 @@ const ForgotPasswordPage = () => {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-  const [hasMounted, setHasMounted] = useState(false)
 
   const {
     isLoading,
     forgotPassword,
     resetPassword,
     message,
-    error,
     clearError,
     clearMessage,
   } = useAppStore()
 
-  useEffect(() => {
-    setHasMounted(true)
-  }, [])
+  const hasMounted = useHydrated()
 
   useEffect(() => {
     if (message === "Password reset successfully") {
@@ -73,9 +70,11 @@ const ForgotPasswordPage = () => {
       await forgotPassword(email)
       toast.success("OTP sent to your email")
       setStep("reset")
-    } catch (err: any) {
+    } catch (err) {
       toast.error(
-        err.response?.data?.message || "Failed to send OTP. Try again."
+        err instanceof Error && err.message
+          ? err.message
+          : "Failed to send OTP. Try again."
       )
     }
   }
@@ -103,9 +102,11 @@ const ForgotPasswordPage = () => {
 
     try {
       await resetPassword(email, otp, newPassword, confirmPassword)
-    } catch (err: any) {
+    } catch (err) {
       toast.error(
-        err.response?.data?.message || "Failed to reset password. Try again."
+        err instanceof Error && err.message
+          ? err.message
+          : "Failed to reset password. Try again."
       )
     }
   }

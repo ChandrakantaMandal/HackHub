@@ -1,34 +1,32 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation" // Next.js Router
 import { Loader, ArrowRight } from "lucide-react"
 import { Rocket } from "lucide-react"
 import { motion } from "framer-motion"
 import { useAppStore } from "../../store/useAppStore"
 import { toast } from "sonner"
+import { useHydrated } from "../../lib/useHydrated"
 
 // UI Imports
 import { Button } from "@workspace/ui/components/button"
 
+// Get pending email from localStorage (set during registration)
+const getPendingEmail = () => {
+  if (typeof window === "undefined") return null
+  return localStorage.getItem("pendingVerificationEmail")
+}
+
 const EmailVerificationPage = () => {
   const [code, setCode] = useState(["", "", "", "", "", ""])
   const inputRefs = useRef<Array<HTMLInputElement | null>>([])
-  const [hasMounted, setHasMounted] = useState(false)
 
   const router = useRouter()
   const { error, isLoading, verifyEmail } = useAppStore()
 
-  // Get pending email from localStorage (set during registration)
-  const getPendingEmail = () => {
-    if (typeof window === "undefined") return null
-    return localStorage.getItem("pendingVerificationEmail")
-  }
-
   // Prevent SSR hydration mismatch
-  useEffect(() => {
-    setHasMounted(true)
-  }, [])
+  const hasMounted = useHydrated()
 
   const handleChange = (index: number, value: string) => {
     const newCode = [...code]
@@ -63,48 +61,53 @@ const EmailVerificationPage = () => {
     }
   }
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-    const verificationCode = code.join("")
+  const handleSubmit = useCallback(
+    async (e?: React.FormEvent) => {
+      if (e) e.preventDefault()
+      const verificationCode = code.join("")
 
-    if (verificationCode.length !== 6) {
-      console.error("Please enter a valid 6-digit code")
-      return
-    }
-
-    try {
-      const email = getPendingEmail()
-      if (!email) {
-        toast.error("Email not found. Please register again.")
-        router.push("/signup")
+      if (verificationCode.length !== 6) {
+        console.error("Please enter a valid 6-digit code")
         return
       }
-      await verifyEmail(email, verificationCode)
-      toast.success("Email Verified Successfully! Account created.")
-      router.push("/dashboard")
-    } catch (error: any) {
-      const errorMessage =
-        error.response?.data?.message || "Verification failed"
-      console.error("Verification error:", errorMessage)
-      toast.error(errorMessage)
 
-      if (
-        errorMessage.includes("expired") ||
-        errorMessage.includes("Invalid")
-      ) {
-        setTimeout(() => {
-          toast.error("Please register again")
+      try {
+        const email = getPendingEmail()
+        if (!email) {
+          toast.error("Email not found. Please register again.")
           router.push("/signup")
-        }, 2000)
+          return
+        }
+        await verifyEmail(email, verificationCode)
+        toast.success("Email Verified Successfully! Account created.")
+        router.push("/dashboard")
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error && err.message
+            ? err.message
+            : "Verification failed"
+        console.error("Verification error:", errorMessage)
+        toast.error(errorMessage)
+
+        if (
+          errorMessage.includes("expired") ||
+          errorMessage.includes("Invalid")
+        ) {
+          setTimeout(() => {
+            toast.error("Please register again")
+            router.push("/signup")
+          }, 2000)
+        }
       }
-    }
-  }
+    },
+    [code, router, verifyEmail]
+  )
 
   useEffect(() => {
     if (code.every((digit) => digit !== "")) {
       handleSubmit()
     }
-  }, [code])
+  }, [code, handleSubmit])
 
   if (!hasMounted) {
     return (

@@ -133,4 +133,67 @@ describe("errorMiddleware", () => {
 
     expect(next).not.toHaveBeenCalled()
   })
+
+  it("should handle AppError with 500 status using its own message", () => {
+    const error = new DatabaseError("Connection pool exhausted")
+    errorMiddleware(error, req, res, next)
+
+    expect(res.status).toHaveBeenCalledWith(500)
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: "Connection pool exhausted",
+    })
+  })
+
+  it("should omit details key when details is undefined", () => {
+    const error = new AppError("No details here", 418)
+    errorMiddleware(error, req, res, next)
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: "No details here",
+    })
+    const payload = vi.mocked(res.json).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >
+    expect("details" in payload).toBe(false)
+  })
+})
+
+describe("AppError prototype quirk (subclasses do not reset prototype)", () => {
+  it("subclass instances are NOT instanceof their own class", () => {
+    const error = new ValidationError("Invalid input")
+    expect(error instanceof ValidationError).toBe(false)
+  })
+
+  it("subclass instances ARE instanceof AppError", () => {
+    const error = new ValidationError("Invalid input")
+    expect(error).toBeInstanceOf(AppError)
+    expect(error).toBeInstanceOf(Error)
+  })
+
+  it("preserves message, statusCode and details despite the prototype reset", () => {
+    const error = new ValidationError("Invalid input", { email: "Required" })
+    expect(error.message).toBe("Invalid input")
+    expect(error.statusCode).toBe(400)
+    expect(error.details).toEqual({ email: "Required" })
+  })
+
+  it("applies to every subclass", () => {
+    const errors = [
+      new BadRequestError("b"),
+      new ValidationError("v"),
+      new AuthError("a"),
+      new ForbiddenError("f"),
+      new NotFoundError("n"),
+      new ConflictError("c"),
+      new DatabaseError("d"),
+    ]
+    for (const error of errors) {
+      expect(error).toBeInstanceOf(AppError)
+      expect(error).toBeInstanceOf(Error)
+      expect(error instanceof AppError).toBe(true)
+    }
+  })
 })

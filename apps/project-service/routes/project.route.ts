@@ -6,7 +6,10 @@ import {
   createTeamSchema,
   joinTeamSchema,
   createProjectSchema,
-} from "../libs/validators"
+  updateProjectSchema,
+  createTaskSchema,
+  updateTaskSchema,
+} from "@workspace/utils"
 
 const router = Router()
 
@@ -23,7 +26,25 @@ router.get("/teams/:teamId", ProjectController.getTeamDetails)
 router.post("/", validate(createProjectSchema), ProjectController.createProject)
 router.post("/submit", ProjectController.submitProject)
 
-// Task Routes
+// Task Routes — static "tasks" paths must be registered before the
+// parameterized "/:projectId" routes so "tasks" is never parsed as an id.
 router.patch("/tasks", ProjectController.updateTaskStatus)
+router.post("/tasks", validate(createTaskSchema), ProjectController.createTask)
+router.patch(
+  "/tasks/:taskId",
+  validate(updateTaskSchema),
+  ProjectController.updateTask
+)
+router.delete("/tasks/:taskId", ProjectController.deleteTask)
+
+// Project read/update/delete
+router.get("/", ProjectController.listProjects)
+router.get("/:projectId", ProjectController.getProject)
+router.patch(
+  "/:projectId",
+  validate(updateProjectSchema),
+  ProjectController.updateProject
+)
+router.delete("/:projectId", ProjectController.deleteProject)
 
 export default router

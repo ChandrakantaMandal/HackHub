@@ -49,3 +49,16 @@ export const authRouteGuard = (req: any, res: Response, next: NextFunction) => {
   }
   return authMiddleware(req, res, next)
 }
+
+const publicJudgePaths = new Set(["/register", "/login"])
+
+export const judgeRouteGuard = (
+  req: any,
+  res: Response,
+  next: NextFunction
+) => {
+  if (publicJudgePaths.has(req.path)) {
+    return next()
+  }
+  return authMiddleware(req, res, next)
+}

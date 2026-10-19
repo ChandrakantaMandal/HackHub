@@ -107,6 +107,129 @@ class ProjectController {
       next(error)
     }
   }
+
+  async listProjects(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+      const result = await ProjectService.listProjects(userId)
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async getProject(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+      const result = await ProjectService.getProject(
+        String(req.params.projectId),
+        userId
+      )
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async updateProject(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+      const { title, description, category, tags } = req.body
+      const result = await ProjectService.updateProject({
+        projectId: String(req.params.projectId),
+        title,
+        description,
+        category,
+        tags,
+        userId,
+      })
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async deleteProject(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+      const result = await ProjectService.deleteProject(
+        String(req.params.projectId),
+        userId
+      )
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async createTask(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+      const { projectId, title, description, assignedTo } = req.body
+      const result = await ProjectService.createTask({
+        projectId,
+        title,
+        description,
+        assignedTo,
+        userId,
+      })
+      return res.status(201).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async updateTask(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+      const { title, description, status, assignedTo } = req.body
+      const result = await ProjectService.updateTask({
+        taskId: String(req.params.taskId),
+        title,
+        description,
+        status,
+        assignedTo,
+        userId,
+      })
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async deleteTask(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+      const result = await ProjectService.deleteTask(
+        String(req.params.taskId),
+        userId
+      )
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
 }
 
 export default new ProjectController()

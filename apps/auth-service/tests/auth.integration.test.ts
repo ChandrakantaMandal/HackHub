@@ -59,6 +59,7 @@ vi.mock("@workspace/config", () => ({
     REDIS_URL: "redis://localhost:6379",
     GMAIL_USER: "test@gmail.com",
     GMAIL_APP_PASSWORD: "app-password",
+    JUDGE_CODES: "JUDGE-2026",
   },
 }))
 
@@ -184,6 +185,49 @@ describe("Auth Service Integration", () => {
       })
 
       expect(res.status).toBe(400)
+    })
+
+    it("should register a judge with a valid judge code", async () => {
+      prisma.account.findUnique.mockResolvedValue(null)
+      prisma.user.findUnique.mockResolvedValue(null)
+      prisma.account.create.mockResolvedValue({
+        id: "account-judge",
+        email: "judge@example.com",
+        isVerified: false,
+        user: { id: "user-judge", username: "judgeuser", role: "JUDGE" },
+      })
+
+      const res = await request(app).post("/register").send({
+        email: "judge@example.com",
+        password: "password123",
+        username: "judgeuser",
+        confirmPassword: "password123",
+        judgeCode: "judge-2026",
+      })
+
+      expect(res.status).toBe(201)
+      expect(res.body.success).toBe(true)
+
+      const createArgs = prisma.account.create.mock.calls[0][0]
+      expect(createArgs.data.user.create.role).toBe("JUDGE")
+      expect(createArgs.data.user.create.judge).toEqual({ create: {} })
+    })
+
+    it("should reject registration with an invalid judge code", async () => {
+      prisma.account.findUnique.mockResolvedValue(null)
+
+      const res = await request(app).post("/register").send({
+        email: "judge@example.com",
+        password: "password123",
+        username: "judgeuser",
+        confirmPassword: "password123",
+        judgeCode: "WRONG-CODE",
+      })
+
+      expect(res.status).toBe(400)
+      expect(res.body.success).toBe(false)
+      expect(res.body.message).toBe("Invalid judge code")
+      expect(prisma.account.create).not.toHaveBeenCalled()
     })
   })
 

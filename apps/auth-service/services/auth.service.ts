@@ -33,6 +33,7 @@ interface RegisterDTO {
   email: string
   password: string
   confirmPassword: string
+  judgeCode?: string
 }
 
 interface LoginDTO {
@@ -52,7 +53,7 @@ type VerifyOtpDTO = {
 class AuthService {
   async register(data: RegisterDTO) {
     try {
-      const { email, password, username, confirmPassword } = data
+      const { email, password, username, confirmPassword, judgeCode } = data
 
       // Validation
       if (!email || !password || !username || !confirmPassword) {
@@ -65,6 +66,20 @@ class AuthService {
 
       if (password.length < 8) {
         throw new ValidationError("Password must be at least 8 characters")
+      }
+
+      let isJudge = false
+      if (judgeCode !== undefined) {
+        const validCodes = String(env.JUDGE_CODES ?? "")
+          .split(",")
+          .map((code) => code.trim().toLowerCase())
+          .filter(Boolean)
+
+        if (!judgeCode || !validCodes.includes(judgeCode.toLowerCase())) {
+          throw new ValidationError("Invalid judge code")
+        }
+
+        isJudge = true
       }
 
       // Check existing account
@@ -100,6 +115,8 @@ class AuthService {
           user: {
             create: {
               username,
+              role: isJudge ? "JUDGE" : "PARTICIPANT",
+              ...(isJudge ? { judge: { create: {} } } : {}),
             },
           },
         },
@@ -156,6 +173,7 @@ class AuthService {
 
       const account = await prisma.account.findUnique({
         where: { email },
+        include: { user: true },
       })
 
       if (!account) {
@@ -172,7 +190,11 @@ class AuthService {
         throw new AuthError("Invalid email or password")
       }
 
-      const accessToken = generateAccessToken(account.id, env.ACCESS_SECRET)
+      const accessToken = generateAccessToken(
+        account.id,
+        env.ACCESS_SECRET,
+        account.user?.role
+      )
       const refreshToken = generateRefreshToken(account.id, env.REFRESH_SECRET)
       const sessionId = crypto.randomUUID()
 
@@ -206,7 +228,12 @@ class AuthService {
 
       await deleteRefreshToken(accountId, sessionId)
 
-      const newAccessToken = generateAccessToken(accountId, env.ACCESS_SECRET)
+      const user = await prisma.user.findUnique({ where: { accountId } })
+      const newAccessToken = generateAccessToken(
+        accountId,
+        env.ACCESS_SECRET,
+        user?.role
+      )
       const newRefreshToken = generateRefreshToken(
         accountId,
         env.REFRESH_SECRET

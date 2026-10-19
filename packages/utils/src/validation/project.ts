@@ -17,3 +17,26 @@ export const createProjectSchema = z.object({
   tags: z.array(z.string()),
   teamId: z.string(),
 })
+
+export const updateProjectSchema = z.object({
+  title: z.string().min(3, "Title must be at least 3 characters").optional(),
+  description: z
+    .string()
+    .min(10, "Description must be at least 10 characters")
+    .optional(),
+  category: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+})
+
+export const createTaskSchema = z.object({
+  title: z.string().min(1, "Task title is required"),
+  description: z.string().optional(),
+  assignedTo: z.string().optional(),
+})
+
+export const updateTaskSchema = z.object({
+  title: z.string().min(1, "Task title cannot be empty").optional(),
+  description: z.string().optional(),
+  status: z.enum(["todo", "in_progress", "completed"]).optional(),
+  assignedTo: z.string().nullable().optional(),
+})

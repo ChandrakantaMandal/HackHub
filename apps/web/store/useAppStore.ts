@@ -72,8 +72,14 @@ export const useAppStore = create<AuthState>()(
           } catch {
             // Profile fetch failed, but login succeeded
           }
-        } catch (err: any) {
-          set({ isLoading: false, error: err.message })
+        } catch (err) {
+          set({
+            isLoading: false,
+            error:
+              err instanceof Error && err.message
+                ? err.message
+                : "An unexpected error occurred",
+          })
           throw err
         }
       },
@@ -99,8 +105,14 @@ export const useAppStore = create<AuthState>()(
             isLoading: false,
             message: "Account created. Please check your email for OTP.",
           })
-        } catch (err: any) {
-          set({ isLoading: false, error: err.message })
+        } catch (err) {
+          set({
+            isLoading: false,
+            error:
+              err instanceof Error && err.message
+                ? err.message
+                : "An unexpected error occurred",
+          })
           throw err
         }
       },
@@ -116,8 +128,14 @@ export const useAppStore = create<AuthState>()(
             isLoading: false,
             message: "OTP sent to your email",
           })
-        } catch (err: any) {
-          set({ isLoading: false, error: err.message })
+        } catch (err) {
+          set({
+            isLoading: false,
+            error:
+              err instanceof Error && err.message
+                ? err.message
+                : "An unexpected error occurred",
+          })
           throw err
         }
       },
@@ -133,8 +151,14 @@ export const useAppStore = create<AuthState>()(
             isLoading: false,
             message: "Email verified successfully",
           })
-        } catch (err: any) {
-          set({ isLoading: false, error: err.message })
+        } catch (err) {
+          set({
+            isLoading: false,
+            error:
+              err instanceof Error && err.message
+                ? err.message
+                : "An unexpected error occurred",
+          })
           throw err
         }
       },
@@ -160,8 +184,14 @@ export const useAppStore = create<AuthState>()(
             isLoading: false,
             message: "Password reset successfully",
           })
-        } catch (err: any) {
-          set({ isLoading: false, error: err.message })
+        } catch (err) {
+          set({
+            isLoading: false,
+            error:
+              err instanceof Error && err.message
+                ? err.message
+                : "An unexpected error occurred",
+          })
           throw err
         }
       },

@@ -1,6 +1,7 @@
 // 1. MUST be the absolute first line before any other imports
 import "@workspace/telemetry"
 
+import httpProxy from "http-proxy"
 import { logger } from "@workspace/logger"
 import { env } from "@workspace/config"
 
@@ -15,4 +16,23 @@ server.on("error", (error) => {
     error: error.message,
     stack: error.stack,
   })
+})
+
+const wsProxy = httpProxy.createProxyServer({ changeOrigin: true })
+
+server.on("upgrade", (req, socket, head) => {
+  wsProxy.ws(
+    req,
+    socket,
+    head,
+    { target: env.CHAT_SERVICE_URL || "http://localhost:5005" },
+    (error) => {
+      logger.error("WebSocket proxy error", { error: error?.message })
+      socket.destroy()
+    }
+  )
+})
+
+wsProxy.on("error", (error) => {
+  logger.error("WebSocket proxy server error", { error: error.message })
 })

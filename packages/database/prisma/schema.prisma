@@ -38,6 +38,7 @@ model User {
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
   judge      Judge?
+  awardedBadges AchievementBadge[]
 }
 
 enum UserRole {
@@ -142,6 +143,8 @@ model Submission {
   status        SubmissionStatus @default(PENDING)
   submittedAt   DateTime?
   createdAt     DateTime         @default(now())
+  judgeScores   JudgeScore[]
+  badges        AchievementBadge[]
 }
 
 enum SubmissionStatus {
@@ -158,6 +161,7 @@ model Judge {
   userId      String       @unique
   user        User         @relation(fields: [userId], references: [id])
   evaluations Evaluation[]
+  scores      JudgeScore[]
   createdAt   DateTime     @default(now())
 }
 
@@ -172,6 +176,41 @@ model Evaluation {
   createdAt DateTime @default(now())
 
   @@unique([projectId, judgeId])
+}
+
+// Per-criteria score a judge gives to a submission (0-10 per criterion;
+// finalScore is the weighted 0-100 result computed by the judge-service).
+model JudgeScore {
+  id           String   @id @default(uuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  judgeId      String
+  judge        Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  innovation   Int
+  technical    Int
+  design       Int
+  presentation Int
+  overall      Int
+  finalScore   Int
+  feedback     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([submissionId, judgeId])
+}
+
+// Badge a judge awards on a submission (e.g. "Best UI", "Innovation").
+model AchievementBadge {
+  id           String   @id @default(uuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  awardedById  String
+  awardedBy    User     @relation(fields: [awardedById], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  createdAt    DateTime @default(now())
+
+  @@unique([submissionId, name])
 }
 
 // =====================

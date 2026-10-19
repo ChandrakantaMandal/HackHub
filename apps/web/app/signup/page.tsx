@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
@@ -17,6 +17,7 @@ import { Button } from "@workspace/ui/components/button"
 
 import PasswordStrengthMeter from "../../components/PasswordStrengthMeter"
 import { useAppStore } from "../../store/useAppStore"
+import { useHydrated } from "../../lib/useHydrated"
 
 const SignupPage = () => {
   const [name, setName] = useState("")
@@ -25,15 +26,12 @@ const SignupPage = () => {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [hasMounted, setHasMounted] = useState(false)
 
   const { register, error, isLoading } = useAppStore()
   const router = useRouter()
 
   // Prevent hydration mismatches with Next.js SSR
-  useEffect(() => {
-    setHasMounted(true)
-  }, [])
+  const hasMounted = useHydrated()
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()

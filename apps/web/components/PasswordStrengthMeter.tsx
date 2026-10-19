@@ -1,7 +1,8 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React from "react"
 import { Check, X } from "lucide-react"
+import { useHydrated } from "../lib/useHydrated"
 
 interface PasswordStrengthProps {
   password?: string
@@ -38,12 +39,8 @@ const PasswordCriteria = ({ password = "" }: PasswordStrengthProps) => {
 }
 
 const PasswordStrengthMeter = ({ password = "" }: PasswordStrengthProps) => {
-  const [hasMounted, setHasMounted] = useState(false)
-
   // Ensure initial client render matches SSR HTML to prevent hydration error
-  useEffect(() => {
-    setHasMounted(true)
-  }, [])
+  const hasMounted = useHydrated()
 
   const getStrength = (pass: string) => {
     let strength = 0

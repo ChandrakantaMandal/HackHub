@@ -9,6 +9,7 @@ export const registerSchema = z
       .min(8, "Password must be at least 8 characters")
       .max(100),
     confirmPassword: z.string(),
+    judgeCode: z.string().trim().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",

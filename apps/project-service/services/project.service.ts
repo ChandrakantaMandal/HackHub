@@ -40,6 +40,44 @@ interface SubmitProjectDTO {
   userId: string
 }
 
+interface UpdateProjectDTO {
+  projectId: string
+  title?: string
+  description?: string
+  category?: string
+  tags?: string[]
+  userId: string
+}
+
+interface CreateTaskDTO {
+  projectId: string
+  title: string
+  description?: string
+  assignedTo?: string
+  userId: string
+}
+
+interface UpdateTaskFieldsDTO {
+  taskId: string
+  title?: string
+  description?: string
+  status?: "todo" | "in_progress" | "completed"
+  assignedTo?: string | null
+  userId: string
+}
+
+const TASK_STATUS_MAP = {
+  todo: "TODO",
+  in_progress: "IN_PROGRESS",
+  completed: "DONE",
+} as const
+
+function computeProgress(tasks: { status: string }[]): number {
+  if (tasks.length === 0) return 0
+  const completedCount = tasks.filter((t) => t.status === "DONE").length
+  return Math.round((completedCount / tasks.length) * 100)
+}
+
 class ProjectService {
   async createTeam(data: CreateTeamDTO) {
     try {
@@ -177,29 +215,16 @@ class ProjectService {
         throw new ValidationError("Task ID and status are required")
       }
 
-      const statusMap: Record<
-        UpdateTaskDTO["status"],
-        "TODO" | "IN_PROGRESS" | "DONE"
-      > = {
-        todo: "TODO",
-        in_progress: "IN_PROGRESS",
-        completed: "DONE",
-      }
-
       const task = await prisma.task.update({
         where: { id: taskId },
-        data: { status: statusMap[status] },
+        data: { status: TASK_STATUS_MAP[status] },
       })
 
       const allTasks = await prisma.task.findMany({
         where: { projectId: task.projectId },
       })
 
-      const completedCount = allTasks.filter((t) => t.status === "DONE").length
-      const progress =
-        allTasks.length > 0
-          ? Math.round((completedCount / allTasks.length) * 100)
-          : 0
+      const progress = computeProgress(allTasks)
 
       logger.info(
         `[TASK_UPDATE] Task ${taskId} status changed to ${status}. New progress: ${progress}%`
@@ -295,6 +320,368 @@ class ProjectService {
     }
 
     return team
+  }
+
+  private async assertTeamMember(teamId: string, userId: string) {
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      include: { members: true },
+    })
+
+    if (!team) {
+      throw new NotFoundError("Team not found")
+    }
+
+    const isMember =
+      team.ownerId === userId || team.members.some((m) => m.userId === userId)
+    if (!isMember) {
+      throw new AuthError(
+        "You must be a member of the team to perform this action"
+      )
+    }
+
+    return team
+  }
+
+  async listProjects(userId: string) {
+    try {
+      if (!userId) {
+        throw new ValidationError("User ID is required")
+      }
+
+      const teams = await prisma.team.findMany({
+        where: {
+          OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+        },
+        include: {
+          projects: {
+            include: {
+              tasks: true,
+              submission: true,
+            },
+          },
+        },
+      })
+
+      const projects = teams.flatMap((team) =>
+        team.projects.map((project) => ({
+          ...project,
+          progress: computeProgress(project.tasks),
+        }))
+      )
+
+      return projects
+    } catch (error) {
+      if (error instanceof Error) throw error
+      throw new DatabaseError("Unable to list projects", error)
+    }
+  }
+
+  async getProject(projectId: string, userId: string) {
+    try {
+      if (!projectId || !userId) {
+        throw new ValidationError("Project ID and user ID are required")
+      }
+
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: {
+          tasks: true,
+          submission: true,
+          team: {
+            include: { members: true },
+          },
+        },
+      })
+
+      if (!project) {
+        throw new NotFoundError("Project not found")
+      }
+
+      const isMember =
+        project.team.ownerId === userId ||
+        project.team.members.some((m) => m.userId === userId)
+      if (!isMember) {
+        throw new AuthError(
+          "You must be a member of the team to view this project"
+        )
+      }
+
+      return {
+        ...project,
+        progress: computeProgress(project.tasks),
+      }
+    } catch (error) {
+      if (error instanceof Error) throw error
+      throw new DatabaseError("Unable to fetch project", error)
+    }
+  }
+
+  async updateProject(data: UpdateProjectDTO) {
+    try {
+      const { projectId, userId, title, description, category, tags } = data
+
+      if (!projectId || !userId) {
+        throw new ValidationError("Project ID and user ID are required")
+      }
+
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+      })
+
+      if (!project) {
+        throw new NotFoundError("Project not found")
+      }
+
+      await this.assertTeamMember(project.teamId, userId)
+
+      const payload: Prisma.ProjectUpdateInput = {}
+      if (title !== undefined) payload.title = title
+      if (description !== undefined) payload.description = description
+      if (category !== undefined) payload.category = category
+      if (tags !== undefined) payload.tags = tags
+
+      if (Object.keys(payload).length === 0) {
+        throw new ValidationError("No fields to update")
+      }
+
+      const updated = await prisma.project.update({
+        where: { id: projectId },
+        data: payload,
+      })
+
+      logger.info(`[PROJECT_UPDATE] Project updated: ${projectId}`)
+      return updated
+    } catch (error) {
+      if (error instanceof Error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2025"
+        ) {
+          throw new NotFoundError("Project not found")
+        }
+        throw error
+      }
+      throw new DatabaseError("Unable to update project", error)
+    }
+  }
+
+  async deleteProject(projectId: string, userId: string) {
+    try {
+      if (!projectId || !userId) {
+        throw new ValidationError("Project ID and user ID are required")
+      }
+
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+      })
+
+      if (!project) {
+        throw new NotFoundError("Project not found")
+      }
+
+      await this.assertTeamMember(project.teamId, userId)
+
+      await prisma.project.delete({ where: { id: projectId } })
+
+      logger.info(
+        `[PROJECT_DELETE] Project ${projectId} deleted by user ${userId}`
+      )
+      return {
+        id: projectId,
+        message: "Project deleted successfully",
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2025"
+        ) {
+          throw new NotFoundError("Project not found")
+        }
+        throw error
+      }
+      throw new DatabaseError("Unable to delete project", error)
+    }
+  }
+
+  async createTask(data: CreateTaskDTO) {
+    try {
+      const { projectId, userId, title, description, assignedTo } = data
+
+      if (!projectId || !userId || !title) {
+        throw new ValidationError("Project ID, user ID, and title are required")
+      }
+
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+      })
+
+      if (!project) {
+        throw new NotFoundError("Project not found")
+      }
+
+      const team = await this.assertTeamMember(project.teamId, userId)
+
+      if (assignedTo) {
+        const isTeamMember =
+          team.ownerId === assignedTo ||
+          team.members.some((m) => m.userId === assignedTo)
+        if (!isTeamMember) {
+          throw new ValidationError("Assignee must be a member of the team")
+        }
+      }
+
+      const task = await prisma.task.create({
+        data: {
+          projectId,
+          title,
+          description: description ?? null,
+          assignedTo: assignedTo ?? null,
+        },
+      })
+
+      const allTasks = await prisma.task.findMany({
+        where: { projectId },
+      })
+
+      logger.info(`[TASK_CREATE] Task "${title}" created in ${projectId}`)
+      return {
+        task,
+        progress: computeProgress(allTasks),
+        message: "Task created successfully",
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2025"
+        ) {
+          throw new NotFoundError("Project not found")
+        }
+        throw error
+      }
+      throw new DatabaseError("Unable to create task", error)
+    }
+  }
+
+  async updateTask(data: UpdateTaskFieldsDTO) {
+    try {
+      const { taskId, userId, title, description, status, assignedTo } = data
+
+      if (!taskId || !userId) {
+        throw new ValidationError("Task ID and user ID are required")
+      }
+
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        include: { project: { select: { teamId: true } } },
+      })
+
+      if (!task) {
+        throw new NotFoundError("Task not found")
+      }
+
+      const team = await this.assertTeamMember(task.project.teamId, userId)
+
+      const payload: Prisma.TaskUpdateInput = {}
+      if (title !== undefined) payload.title = title
+      if (description !== undefined) payload.description = description
+      if (status !== undefined) payload.status = TASK_STATUS_MAP[status]
+
+      if (assignedTo !== undefined) {
+        const assignee = assignedTo === "" ? null : assignedTo
+        if (assignee) {
+          const isTeamMember =
+            team.ownerId === assignee ||
+            team.members.some((m) => m.userId === assignee)
+          if (!isTeamMember) {
+            throw new ValidationError("Assignee must be a member of the team")
+          }
+        }
+        payload.assignedTo = assignee
+      }
+
+      if (Object.keys(payload).length === 0) {
+        throw new ValidationError("No fields to update")
+      }
+
+      const updated = await prisma.task.update({
+        where: { id: taskId },
+        data: payload,
+      })
+
+      const allTasks = await prisma.task.findMany({
+        where: { projectId: task.projectId },
+      })
+
+      const progress = computeProgress(allTasks)
+      logger.info(
+        `[TASK_UPDATE] Task ${taskId} updated. Progress: ${progress}%`
+      )
+      return {
+        task: updated,
+        progress,
+        message: "Task updated successfully",
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2025"
+        ) {
+          throw new NotFoundError("Task not found")
+        }
+        throw error
+      }
+      throw new DatabaseError("Unable to update task", error)
+    }
+  }
+
+  async deleteTask(taskId: string, userId: string) {
+    try {
+      if (!taskId || !userId) {
+        throw new ValidationError("Task ID and user ID are required")
+      }
+
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        include: { project: { select: { teamId: true } } },
+      })
+
+      if (!task) {
+        throw new NotFoundError("Task not found")
+      }
+
+      await this.assertTeamMember(task.project.teamId, userId)
+
+      await prisma.task.delete({ where: { id: taskId } })
+
+      const allTasks = await prisma.task.findMany({
+        where: { projectId: task.projectId },
+      })
+
+      const progress = computeProgress(allTasks)
+      logger.info(
+        `[TASK_DELETE] Task ${taskId} deleted. Progress: ${progress}%`
+      )
+      return {
+        id: taskId,
+        progress,
+        message: "Task deleted successfully",
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2025"
+        ) {
+          throw new NotFoundError("Task not found")
+        }
+        throw error
+      }
+      throw new DatabaseError("Unable to delete task", error)
+    }
   }
 }
 
