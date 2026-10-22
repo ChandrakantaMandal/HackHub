@@ -5,6 +5,7 @@ import {
   NotFoundError,
   DatabaseError,
   AuthError,
+  ForbiddenError,
 } from "@workspace/error-handler"
 import { logger } from "@workspace/logger"
 
@@ -24,6 +25,7 @@ interface CreateProjectDTO {
   category: string
   tags: string[]
   teamId: string
+  hackathonId: string
   userId: string
 }
 
@@ -160,11 +162,152 @@ class ProjectService {
     }
   }
 
+  async listTeams(userId: string) {
+    try {
+      if (!userId) {
+        throw new ValidationError("User ID is required")
+      }
+
+      const teams = await prisma.team.findMany({
+        where: {
+          OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+        },
+        include: {
+          members: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  username: true,
+                  name: true,
+                  avatar: true,
+                  role: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+
+      return teams
+    } catch (error) {
+      if (error instanceof Error) throw error
+      throw new DatabaseError("Unable to list teams", error)
+    }
+  }
+
+  async deleteTeam(teamId: string, userId: string) {
+    try {
+      if (!teamId || !userId) {
+        throw new ValidationError("Team ID and user ID are required")
+      }
+
+      const team = await prisma.team.findUnique({
+        where: { id: teamId },
+      })
+
+      if (!team) {
+        throw new NotFoundError("Team not found")
+      }
+
+      if (team.ownerId !== userId) {
+        throw new ForbiddenError("Only the team owner can delete this team")
+      }
+
+      await prisma.team.delete({ where: { id: teamId } })
+
+      logger.info(`[TEAM_DELETE] Team ${teamId} deleted by owner ${userId}`)
+      return {
+        id: teamId,
+        message: "Team deleted successfully",
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2025"
+        ) {
+          throw new NotFoundError("Team not found")
+        }
+        throw error
+      }
+      throw new DatabaseError("Unable to delete team", error)
+    }
+  }
+
+  async removeMember(
+    teamId: string,
+    targetUserId: string,
+    actorUserId: string
+  ) {
+    try {
+      if (!teamId || !targetUserId || !actorUserId) {
+        throw new ValidationError("Team ID and user ID are required")
+      }
+
+      const team = await prisma.team.findUnique({
+        where: { id: teamId },
+        include: { members: true },
+      })
+
+      if (!team) {
+        throw new NotFoundError("Team not found")
+      }
+
+      const member = team.members.find((m) => m.userId === targetUserId)
+      if (!member) {
+        throw new NotFoundError("Team member not found")
+      }
+
+      if (targetUserId === actorUserId) {
+        // Self-removal: members may leave, but the owner must delete the team.
+        if (team.ownerId === actorUserId) {
+          throw new ForbiddenError(
+            "Owner cannot leave team; delete the team instead"
+          )
+        }
+      } else if (team.ownerId !== actorUserId) {
+        throw new ForbiddenError("Only the team owner can remove members")
+      }
+
+      await prisma.teamMember.delete({ where: { id: member.id } })
+
+      logger.info(
+        `[TEAM_MEMBER_REMOVE] User ${targetUserId} removed from team ${teamId} by ${actorUserId}`
+      )
+      return {
+        teamId,
+        userId: targetUserId,
+        message: "Member removed from team",
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2025"
+        ) {
+          throw new NotFoundError("Team member not found")
+        }
+        throw error
+      }
+      throw new DatabaseError("Unable to remove team member", error)
+    }
+  }
+
   async createProject(data: CreateProjectDTO) {
     try {
-      const { title, description, category, tags, teamId, userId } = data
+      const {
+        title,
+        description,
+        category,
+        tags,
+        teamId,
+        hackathonId,
+        userId,
+      } = data
 
-      if (!title || !description || !category || !teamId) {
+      if (!title || !description || !category || !teamId || !hackathonId) {
         throw new ValidationError(
           "All required project fields must be provided"
         )
@@ -187,6 +330,16 @@ class ProjectService {
         )
       }
 
+      const registration = await prisma.hackathonRegistration.findUnique({
+        where: { userId_hackathonId: { userId, hackathonId } },
+      })
+
+      if (!registration) {
+        throw new ValidationError(
+          "You must register for this hackathon before creating a project"
+        )
+      }
+
       const project = await prisma.project.create({
         data: {
           title,
@@ -194,6 +347,7 @@ class ProjectService {
           category,
           tags,
           teamId,
+          hackathonId,
         },
       })
 
@@ -389,7 +543,23 @@ class ProjectService {
           tasks: true,
           submission: true,
           team: {
-            include: { members: true },
+            include: {
+              owner: {
+                select: { id: true, username: true, name: true, avatar: true },
+              },
+              members: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      username: true,
+                      name: true,
+                      avatar: true,
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       })

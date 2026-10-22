@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
-import { FolderKanban, Loader2, Plus } from "lucide-react"
+import { FolderKanban, Loader2, Plus, Trophy } from "lucide-react"
 import { toast } from "sonner"
 import { apiGet, apiPost } from "@/lib/client"
 import { useAppStore } from "@/store/useAppStore"
 import { useHydrated } from "@/lib/useHydrated"
-import type { Project, Team } from "@/lib/types"
+import type { Hackathon, Project, Team } from "@/lib/types"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -42,6 +42,7 @@ export default function ProjectsPage() {
   const user = useAppStore((s) => s.user)
   const [projects, setProjects] = useState<Project[]>([])
   const [teams, setTeams] = useState<Team[]>([])
+  const [myHackathons, setMyHackathons] = useState<Hackathon[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -50,6 +51,7 @@ export default function ProjectsPage() {
     title: "",
     description: "",
     teamId: "",
+    hackathonId: "",
     category: "",
     tags: "",
   })
@@ -69,18 +71,22 @@ export default function ProjectsPage() {
   useEffect(() => {
     if (!hydrated) return
     void load()
-    apiGet<Team[]>("/teams")
+    apiGet<Team[]>("/projects/teams")
       .then(setTeams)
+      .catch(() => {})
+    apiGet<Hackathon[]>("/hackathons/mine")
+      .then(setMyHackathons)
       .catch(() => {})
   }, [hydrated, load])
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.title.trim() || !form.teamId) return
+    if (!form.title.trim() || !form.teamId || !form.hackathonId) return
     setCreating(true)
     try {
       await apiPost("/projects", {
         teamId: form.teamId,
+        hackathonId: form.hackathonId,
         title: form.title.trim(),
         description: form.description.trim(),
         category: form.category.trim() || undefined,
@@ -88,13 +94,14 @@ export default function ProjectsPage() {
           .split(",")
           .map((t) => t.trim())
           .filter(Boolean),
-        userId: user?.id,
+        userId: user?.user?.id,
       })
       toast.success("Project created")
       setForm({
         title: "",
         description: "",
         teamId: "",
+        hackathonId: "",
         category: "",
         tags: "",
       })
@@ -139,108 +146,169 @@ export default function ProjectsPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreate} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="p-title" className="text-slate-300">
-                    Title
-                  </Label>
-                  <Input
-                    id="p-title"
-                    value={form.title}
-                    onChange={(e) =>
-                      setForm({ ...form, title: e.target.value })
-                    }
-                    placeholder="e.g. Smart Grid Optimizer"
-                    className="border-slate-800 bg-slate-950 text-slate-100"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="p-team" className="text-slate-300">
-                    Team
-                  </Label>
-                  <Select
-                    value={form.teamId}
-                    onValueChange={(v) => setForm({ ...form, teamId: v ?? "" })}
+              {myHackathons.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-800 p-8 text-center">
+                  <Trophy className="mx-auto mb-3 h-8 w-8 text-slate-700" />
+                  <p className="text-sm text-slate-400">
+                    Register for a hackathon before creating a project.
+                  </p>
+                  <Button
+                    render={<Link href="/hackathons" />}
+                    nativeButton={false}
+                    size="sm"
+                    className="mt-4 bg-violet-600 text-white hover:bg-violet-500"
                   >
-                    <SelectTrigger
-                      id="p-team"
-                      className="border-slate-800 bg-slate-950 text-slate-100"
+                    Browse hackathons
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="p-title" className="text-slate-300">
+                        Title
+                      </Label>
+                      <Input
+                        id="p-title"
+                        value={form.title}
+                        onChange={(e) =>
+                          setForm({ ...form, title: e.target.value })
+                        }
+                        placeholder="e.g. Smart Grid Optimizer"
+                        className="border-slate-800 bg-slate-950 text-slate-100"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="p-team" className="text-slate-300">
+                        Team
+                      </Label>
+                      <Select
+                        value={form.teamId}
+                        items={teams.map((t) => ({
+                          value: t.id,
+                          label: t.name,
+                        }))}
+                        onValueChange={(v) =>
+                          setForm({ ...form, teamId: v ?? "" })
+                        }
+                      >
+                        <SelectTrigger
+                          id="p-team"
+                          className="border-slate-800 bg-slate-950 text-slate-100"
+                        >
+                          <SelectValue placeholder="Select a team" />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-800 bg-slate-900">
+                          {teams.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="p-hackathon" className="text-slate-300">
+                        Hackathon
+                      </Label>
+                      <Select
+                        value={form.hackathonId}
+                        items={myHackathons.map((h) => ({
+                          value: h.id,
+                          label: h.name,
+                        }))}
+                        onValueChange={(v) =>
+                          setForm({ ...form, hackathonId: v ?? "" })
+                        }
+                      >
+                        <SelectTrigger
+                          id="p-hackathon"
+                          className="border-slate-800 bg-slate-950 text-slate-100"
+                        >
+                          <SelectValue placeholder="Select a hackathon" />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-800 bg-slate-900">
+                          {myHackathons.map((h) => (
+                            <SelectItem key={h.id} value={h.id}>
+                              {h.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="p-desc" className="text-slate-300">
+                      Description
+                    </Label>
+                    <Textarea
+                      id="p-desc"
+                      value={form.description}
+                      onChange={(e) =>
+                        setForm({ ...form, description: e.target.value })
+                      }
+                      placeholder="What are you building?"
+                      className="min-h-20 border-slate-800 bg-slate-950 text-slate-100"
+                    />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="p-cat" className="text-slate-300">
+                        Category (optional)
+                      </Label>
+                      <Input
+                        id="p-cat"
+                        value={form.category}
+                        onChange={(e) =>
+                          setForm({ ...form, category: e.target.value })
+                        }
+                        placeholder="e.g. AI/ML, HealthTech"
+                        className="border-slate-800 bg-slate-950 text-slate-100"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="p-tags" className="text-slate-300">
+                        Tags (comma-separated)
+                      </Label>
+                      <Input
+                        id="p-tags"
+                        value={form.tags}
+                        onChange={(e) =>
+                          setForm({ ...form, tags: e.target.value })
+                        }
+                        placeholder="react, node, llm"
+                        className="border-slate-800 bg-slate-950 text-slate-100"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="submit"
+                      disabled={
+                        creating ||
+                        !form.title.trim() ||
+                        !form.teamId ||
+                        !form.hackathonId
+                      }
+                      className="bg-violet-600 text-white hover:bg-violet-500"
                     >
-                      <SelectValue placeholder="Select a team" />
-                    </SelectTrigger>
-                    <SelectContent className="border-slate-800 bg-slate-900">
-                      {teams.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="p-desc" className="text-slate-300">
-                  Description
-                </Label>
-                <Textarea
-                  id="p-desc"
-                  value={form.description}
-                  onChange={(e) =>
-                    setForm({ ...form, description: e.target.value })
-                  }
-                  placeholder="What are you building?"
-                  className="min-h-20 border-slate-800 bg-slate-950 text-slate-100"
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="p-cat" className="text-slate-300">
-                    Category (optional)
-                  </Label>
-                  <Input
-                    id="p-cat"
-                    value={form.category}
-                    onChange={(e) =>
-                      setForm({ ...form, category: e.target.value })
-                    }
-                    placeholder="e.g. AI/ML, HealthTech"
-                    className="border-slate-800 bg-slate-950 text-slate-100"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="p-tags" className="text-slate-300">
-                    Tags (comma-separated)
-                  </Label>
-                  <Input
-                    id="p-tags"
-                    value={form.tags}
-                    onChange={(e) => setForm({ ...form, tags: e.target.value })}
-                    placeholder="react, node, llm"
-                    className="border-slate-800 bg-slate-950 text-slate-100"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  type="submit"
-                  disabled={creating || !form.title.trim() || !form.teamId}
-                  className="bg-violet-600 text-white hover:bg-violet-500"
-                >
-                  {creating && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Create
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="text-slate-400"
-                  onClick={() => setShowForm(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
+                      {creating && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Create
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="text-slate-400"
+                      onClick={() => setShowForm(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </>
+              )}
             </form>
           </CardContent>
         </Card>

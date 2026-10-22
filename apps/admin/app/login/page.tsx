@@ -3,7 +3,9 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { ShieldCheck } from "lucide-react"
-import { useAdminUser } from "@/lib/auth"
+import { setAdminUser, useAdminUser } from "@/lib/auth"
+import { ApiError, apiGet, apiPost } from "@/lib/client"
+import type { LoginResult, ProfileResult } from "@/lib/types"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -25,12 +27,12 @@ export default function AdminLoginPage() {
   const [submitting, setSubmitting] = React.useState(false)
 
   React.useEffect(() => {
-    if (hydrated && user) {
+    if (hydrated && user?.role === "ADMIN") {
       router.replace("/overview")
     }
   }, [hydrated, user, router])
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
 
@@ -45,16 +47,41 @@ export default function AdminLoginPage() {
     }
 
     setSubmitting(true)
-    // Mock admin auth: any email + password of 6+ chars is accepted.
-    // Replace with a real admin auth endpoint when one exists.
-    window.localStorage.setItem(
-      "hackhub-admin-user",
-      JSON.stringify({ email: email.trim() })
-    )
-    router.replace("/overview")
+    try {
+      const session = await apiPost<LoginResult>(
+        "/auth/login",
+        { email: email.trim(), password },
+        { skipAuth: true }
+      )
+      const profile = await apiGet<ProfileResult>("/auth/profile", {
+        token: session.accessToken,
+      })
+
+      if (profile.user?.role !== "ADMIN") {
+        setError("Admin access required")
+        return
+      }
+
+      setAdminUser({
+        email: profile.email,
+        role: profile.user.role,
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        sessionId: session.sessionId,
+      })
+      router.replace("/overview")
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Sign in failed. Please try again."
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  if (!hydrated || user) {
+  if (!hydrated || user?.role === "ADMIN") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 p-4">
         <Skeleton className="h-80 w-full max-w-sm rounded-2xl bg-slate-900" />
@@ -118,9 +145,6 @@ export default function AdminLoginPage() {
             >
               {submitting ? "Signing in…" : "Sign in"}
             </Button>
-            <p className="text-center text-xs text-slate-600">
-              Demo console — any email + 6 char password works
-            </p>
           </form>
         </CardContent>
       </Card>

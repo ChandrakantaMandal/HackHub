@@ -4,11 +4,7 @@ import {
   rankProjects,
   type LeaderboardRow,
 } from "../libs/scoring"
-import {
-  judgeRegisterSchema,
-  scoreSchema,
-  awardBadgeSchema,
-} from "@workspace/utils"
+import { scoreSchema, awardBadgeSchema } from "@workspace/utils"
 import { requireJudge, userContext } from "../middleware/judge.middleware"
 
 describe("computeFinalScore", () => {
@@ -130,50 +126,6 @@ describe("rankProjects", () => {
 
   it("returns an empty list for no scores", () => {
     expect(rankProjects([])).toEqual([])
-  })
-})
-
-describe("judgeRegisterSchema", () => {
-  const validInput = {
-    username: "judge1",
-    email: "judge@example.com",
-    password: "secret123",
-    confirmPassword: "secret123",
-    judgeCode: "JUDGE-2026",
-  }
-
-  it("accepts a valid judge registration", () => {
-    const result = judgeRegisterSchema.safeParse(validInput)
-    expect(result.success).toBe(true)
-  })
-
-  it("requires a judge code", () => {
-    const { judgeCode, ...withoutCode } = validInput
-    const result = judgeRegisterSchema.safeParse(withoutCode)
-
-    expect(result.success).toBe(false)
-    expect(result.error?.flatten().fieldErrors.judgeCode).toBeDefined()
-  })
-
-  it("rejects an empty judge code", () => {
-    const result = judgeRegisterSchema.safeParse({
-      ...validInput,
-      judgeCode: "   ",
-    })
-
-    expect(result.success).toBe(false)
-  })
-
-  it("preserves the base register schema password refinement", () => {
-    const result = judgeRegisterSchema.safeParse({
-      ...validInput,
-      confirmPassword: "different123",
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.error?.flatten().fieldErrors.confirmPassword).toEqual([
-      "Passwords do not match",
-    ])
   })
 })
 

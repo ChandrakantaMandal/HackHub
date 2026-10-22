@@ -40,6 +40,8 @@ model User {
   judge      Judge?
   awardedBadges AchievementBadge[]
   sentMessages Message[]
+  hackathons Hackathon[]
+  hackathonRegistrations HackathonRegistration[]
 }
 
 enum UserRole {
@@ -94,6 +96,8 @@ model Project {
   tags        String[]
   status      ProjectStatus    @default(DRAFT)
   deadline    DateTime?
+  hackathonId String?
+  hackathon   Hackathon?       @relation(fields: [hackathonId], references: [id], onDelete: SetNull)
   tasks       Task[]
   submission  Submission?
   evaluations Evaluation[]
@@ -315,4 +319,49 @@ model Message {
   createdAt DateTime @default(now())
 
   @@index([roomId, createdAt])
+}
+
+// =====================
+// HACKATHON
+// =====================
+enum HackathonStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model Hackathon {
+  id                  String          @id @default(uuid())
+  name                String
+  tagline             String?
+  description         String?
+  guidelines          String?
+  joinCode            String          @unique
+  allowJoin           Boolean         @default(true)
+  maxTeamSize         Int             @default(5)
+  registrationDeadline DateTime
+  startDate           DateTime
+  endDate             DateTime
+  location            String?
+  status              HackathonStatus @default(ACTIVE)
+  createdById         String?
+  createdBy           User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  registrations       HackathonRegistration[]
+  projects            Project[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+}
+
+// A user's registration for a hackathon. Joining (via Register button or
+// join code) creates a row; project creation requires one for the hackathon.
+model HackathonRegistration {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hackathonId String
+  hackathon   Hackathon @relation(fields: [hackathonId], references: [id], onDelete: Cascade)
+  registeredAt DateTime @default(now())
+
+  @@unique([userId, hackathonId])
 }

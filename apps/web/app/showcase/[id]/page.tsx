@@ -76,6 +76,10 @@ export default function ShowcaseDetailPage() {
   }, [hydrated, load])
 
   const toggleLike = async () => {
+    if (!user) {
+      router.push("/signin")
+      return
+    }
     setLiking(true)
     try {
       const res = await apiPost<{

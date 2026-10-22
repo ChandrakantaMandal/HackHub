@@ -1,55 +1,5 @@
 import { describe, it, expect } from "vitest"
-import {
-  judgeRegisterSchema,
-  scoreSchema,
-  awardBadgeSchema,
-} from "../src/validation/judge"
-
-const baseRegister = {
-  username: "judge1",
-  email: "judge@hackhub.dev",
-  password: "secret123",
-  confirmPassword: "secret123",
-}
-
-describe("judgeRegisterSchema", () => {
-  it("accepts valid input with a judge code", () => {
-    const result = judgeRegisterSchema.safeParse({
-      ...baseRegister,
-      judgeCode: "ABC123",
-    })
-    expect(result.success).toBe(true)
-  })
-
-  it("rejects missing judgeCode", () => {
-    expect(judgeRegisterSchema.safeParse(baseRegister).success).toBe(false)
-  })
-
-  it("rejects whitespace-only judgeCode", () => {
-    expect(
-      judgeRegisterSchema.safeParse({ ...baseRegister, judgeCode: "   " })
-        .success
-    ).toBe(false)
-  })
-
-  it("rejects password/confirmPassword mismatch (refinement survives safeExtend)", () => {
-    expect(
-      judgeRegisterSchema.safeParse({
-        ...baseRegister,
-        confirmPassword: "different",
-        judgeCode: "ABC123",
-      }).success
-    ).toBe(false)
-  })
-
-  it("still enforces base register fields", () => {
-    const { username: _username, ...missingUsername } = baseRegister
-    expect(
-      judgeRegisterSchema.safeParse({ ...missingUsername, judgeCode: "ABC123" })
-        .success
-    ).toBe(false)
-  })
-})
+import { scoreSchema, awardBadgeSchema } from "../src/validation/judge"
 
 describe("scoreSchema", () => {
   const validScore = {

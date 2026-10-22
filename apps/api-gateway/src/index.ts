@@ -9,6 +9,10 @@ import app from "./app"
 
 const server = app.listen(env.API_GATEWAY_PORT, () => {
   logger.info(`Listening at http://localhost:${env.API_GATEWAY_PORT}/api`)
+  logger.info("OTEL_LOKI_TEST", {
+    test: true,
+    service: "api-gateway",
+  })
 })
 
 server.on("error", (error) => {

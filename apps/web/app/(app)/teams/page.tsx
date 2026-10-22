@@ -76,7 +76,7 @@ export default function TeamsPage() {
 
   const load = useCallback(async () => {
     try {
-      const data = await apiGet<Team[]>("/teams")
+      const data = await apiGet<Team[]>("/projects/teams")
       setTeams(data)
       setError(null)
     } catch (e) {
@@ -95,9 +95,9 @@ export default function TeamsPage() {
     if (!newName.trim()) return
     setCreating(true)
     try {
-      await apiPost<Team>("/teams", {
+      await apiPost<Team>("/projects/teams", {
         name: newName.trim(),
-        userId: user?.id,
+        userId: user?.user?.id,
       })
       setNewName("")
       toast.success("Team created")
@@ -114,9 +114,9 @@ export default function TeamsPage() {
     if (!joinCode.trim()) return
     setJoining(true)
     try {
-      await apiPost("/teams/join", {
+      await apiPost("/projects/teams/join", {
         inviteCode: joinCode.trim(),
-        userId: user?.id,
+        userId: user?.user?.id,
       })
       setJoinCode("")
       toast.success("Joined team")
@@ -129,9 +129,10 @@ export default function TeamsPage() {
   }
 
   const handleLeave = async (team: Team) => {
-    if (!user) return
+    const memberUserId = user?.user?.id
+    if (!memberUserId) return
     try {
-      await apiDelete(`/teams/${team.id}/members/${user.id}`)
+      await apiDelete(`/projects/teams/${team.id}/members/${memberUserId}`)
       toast.success("Left team")
       await load()
     } catch (err) {
@@ -141,7 +142,7 @@ export default function TeamsPage() {
 
   const handleDelete = async (team: Team) => {
     try {
-      await apiDelete(`/teams/${team.id}`)
+      await apiDelete(`/projects/teams/${team.id}`)
       toast.success("Team deleted")
       await load()
     } catch (err) {
@@ -265,7 +266,7 @@ export default function TeamsPage() {
         {!loading && teams.length > 0 && (
           <div className="space-y-4">
             {teams.map((team) => {
-              const isOwner = team.ownerId === user?.id
+              const isOwner = team.ownerId === user?.user?.id
               return (
                 <Card
                   key={team.id}

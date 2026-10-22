@@ -178,7 +178,7 @@ describe("authRouteGuard", () => {
 })
 
 describe("judgeRouteGuard", () => {
-  it.each(["/register", "/login"])("allows %s without a token", (path) => {
+  it.each(["/login"])("allows %s without a token", (path) => {
     const req = reqWith({}, path)
     const res = mockRes()
     const next = vi.fn()

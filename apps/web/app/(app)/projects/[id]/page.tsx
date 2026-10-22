@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
@@ -8,13 +8,14 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  Plus,
   Trash2,
   Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
-import { apiDelete, apiGet, apiPatch } from "@/lib/client"
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/client"
 import { useHydrated } from "@/lib/useHydrated"
-import type { Project, TaskStatus } from "@/lib/types"
+import type { Project, Task, TaskStatus } from "@/lib/types"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -58,6 +59,34 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [newTitle, setNewTitle] = useState("")
+  const [newDesc, setNewDesc] = useState("")
+  const [newAssignee, setNewAssignee] = useState("")
+  const [reassigning, setReassigning] = useState<string | null>(null)
+
+  const assigneeOptions = useMemo(() => {
+    if (!project?.team) return []
+    const opts: { value: string; label: string }[] = []
+    const seen = new Set<string>()
+    if (project.team.ownerId) {
+      seen.add(project.team.ownerId)
+      const owner = project.team.owner
+      opts.push({
+        value: project.team.ownerId,
+        label: `${owner?.name || owner?.username || "Owner"} (owner)`,
+      })
+    }
+    for (const m of project.team.members ?? []) {
+      if (seen.has(m.userId)) continue
+      seen.add(m.userId)
+      opts.push({
+        value: m.userId,
+        label: m.user?.name || m.user?.username || m.userId.slice(0, 8),
+      })
+    }
+    return opts
+  }, [project?.team])
 
   const load = useCallback(async () => {
     try {
@@ -79,7 +108,7 @@ export default function ProjectDetailPage() {
     setToggling(taskId)
     const target = nextStatus(current)
     try {
-      await apiPatch(`/projects/${id}/tasks/${taskId}`, { status: target })
+      await apiPatch(`/projects/tasks/${taskId}`, { status: target })
       setProject((prev) => {
         if (!prev?.tasks) return prev
         return {
@@ -98,7 +127,7 @@ export default function ProjectDetailPage() {
 
   const deleteTask = async (taskId: string) => {
     try {
-      await apiDelete(`/projects/${id}/tasks/${taskId}`)
+      await apiDelete(`/projects/tasks/${taskId}`)
       setProject((prev) => {
         if (!prev?.tasks) return prev
         return { ...prev, tasks: prev.tasks.filter((t) => t.id !== taskId) }
@@ -106,6 +135,58 @@ export default function ProjectDetailPage() {
       toast.success("Task deleted")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete task")
+    }
+  }
+
+  const assignTask = async (taskId: string, assignedTo: string) => {
+    setReassigning(taskId)
+    try {
+      const result = await apiPatch<{ task: Task }>(
+        `/projects/tasks/${taskId}`,
+        { assignedTo }
+      )
+      setProject((prev) => {
+        if (!prev?.tasks) return prev
+        return {
+          ...prev,
+          tasks: prev.tasks.map((t) =>
+            t.id === taskId ? { ...t, assignedTo: result.task.assignedTo } : t
+          ),
+        }
+      })
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update assignee"
+      )
+    } finally {
+      setReassigning(null)
+    }
+  }
+
+  const addTask = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const title = newTitle.trim()
+    if (!title) return
+    setAdding(true)
+    try {
+      const result = await apiPost<{ task: Task }>(`/projects/tasks`, {
+        projectId: id,
+        title,
+        description: newDesc.trim() || undefined,
+        assignedTo: newAssignee || undefined,
+      })
+      setProject((prev) => {
+        if (!prev) return prev
+        return { ...prev, tasks: [...(prev.tasks ?? []), result.task] }
+      })
+      setNewTitle("")
+      setNewDesc("")
+      setNewAssignee("")
+      toast.success("Task added")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add task")
+    } finally {
+      setAdding(false)
     }
   }
 
@@ -260,10 +341,58 @@ export default function ProjectDetailPage() {
             Tap a task to cycle its status: todo → in progress → done
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <form onSubmit={(e) => void addTask(e)} className="space-y-2">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="New task title"
+                maxLength={200}
+                className="flex-1 rounded-lg border border-slate-700 bg-slate-950/50 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:border-violet-600 focus:outline-none"
+              />
+              {assigneeOptions.length > 0 && (
+                <select
+                  value={newAssignee}
+                  onChange={(e) => setNewAssignee(e.target.value)}
+                  aria-label="Assignee"
+                  className="w-40 shrink-0 rounded-lg border border-slate-700 bg-slate-950/50 px-2 py-2 text-sm text-slate-400 focus:border-violet-600 focus:outline-none"
+                >
+                  <option value="">Unassigned</option>
+                  {assigneeOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Button
+                type="submit"
+                size="sm"
+                disabled={adding || !newTitle.trim()}
+                className="bg-violet-600 text-white hover:bg-violet-500"
+              >
+                {adding ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="mr-1 h-4 w-4" />
+                )}
+                Add
+              </Button>
+            </div>
+            <input
+              type="text"
+              value={newDesc}
+              onChange={(e) => setNewDesc(e.target.value)}
+              placeholder="Description (optional)"
+              maxLength={500}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950/50 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:border-violet-600 focus:outline-none"
+            />
+          </form>
           {!project.tasks || project.tasks.length === 0 ? (
             <p className="py-4 text-center text-sm text-slate-500">
-              No tasks yet. Task creation is coming soon.
+              No tasks yet. Add one above.
             </p>
           ) : (
             <ul className="divide-y divide-slate-800">
@@ -297,6 +426,30 @@ export default function ProjectDetailPage() {
                       )}
                     </div>
                   </button>
+                  {assigneeOptions.length > 0 && (
+                    <select
+                      value={task.assignedTo ?? ""}
+                      disabled={reassigning === task.id}
+                      aria-label={`Assignee for ${task.title}`}
+                      onChange={(e) => void assignTask(task.id, e.target.value)}
+                      className="w-32 shrink-0 rounded-lg border border-slate-700 bg-slate-950/50 px-2 py-1.5 text-xs text-slate-400 focus:border-violet-600 focus:outline-none disabled:opacity-50"
+                    >
+                      <option value="">Unassigned</option>
+                      {assigneeOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                      {task.assignedTo &&
+                        !assigneeOptions.some(
+                          (o) => o.value === task.assignedTo
+                        ) && (
+                          <option value={task.assignedTo}>
+                            {task.assignedTo.slice(0, 8)} (former member)
+                          </option>
+                        )}
+                    </select>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"

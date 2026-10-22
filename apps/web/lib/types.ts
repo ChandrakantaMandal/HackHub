@@ -79,6 +79,7 @@ export interface Submission {
 export interface Project {
   id: string
   teamId: string
+  hackathonId?: string | null
   title: string
   description: string
   category?: string | null
@@ -145,6 +146,25 @@ export interface ShowcaseDetail extends Omit<
     liveUrl?: string | null
   }
   commentsList: ShowcaseComment[]
+}
+
+export type HackathonStatus = "UPCOMING" | "ACTIVE" | "COMPLETED" | "CANCELLED"
+
+export interface Hackathon {
+  id: string
+  name: string
+  tagline?: string | null
+  description?: string | null
+  location?: string | null
+  startDate: string
+  endDate: string
+  registrationDeadline: string
+  allowJoin: boolean
+  maxTeamSize: number
+  status: HackathonStatus
+  participantCount: number
+  registered: boolean
+  isRegistrationOpen: boolean
 }
 
 export interface ShowcaseStats {

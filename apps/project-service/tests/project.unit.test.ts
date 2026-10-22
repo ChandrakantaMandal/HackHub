@@ -44,6 +44,23 @@ const { mockPrisma, PrismaClientKnownRequestError } = vi.hoisted(() => {
       update: vi.fn(),
       delete: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn(),
+    },
+    teamMember: {
+      create: vi.fn(),
+      delete: vi.fn(),
+    },
+    hackathon: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+    },
+    hackathonRegistration: {
+      create: vi.fn(),
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      count: vi.fn(),
+    },
   }
 
   return { mockPrisma, PrismaClientKnownRequestError }
@@ -220,7 +237,280 @@ describe("projectService.joinTeam", () => {
   })
 })
 
+describe("projectService.listTeams", () => {
+  it("rejects with 400 when userId is missing", async () => {
+    await expectRejection(
+      projectService.listTeams(""),
+      400,
+      "User ID is required"
+    )
+    expect(mockPrisma.team.findMany).not.toHaveBeenCalled()
+  })
+
+  it("lists owned and member teams with member user details", async () => {
+    const teams = [
+      { id: "t1", ownerId: "u1", members: [{ userId: "u1" }] },
+      { id: "t2", ownerId: "u2", members: [{ userId: "u1" }] },
+    ]
+    mockPrisma.team.findMany.mockResolvedValue(teams)
+
+    const result = await projectService.listTeams("u1")
+
+    expect(result).toEqual(teams)
+    expect(mockPrisma.team.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [{ ownerId: "u1" }, { members: { some: { userId: "u1" } } }],
+      },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                name: true,
+                avatar: true,
+                role: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    })
+  })
+
+  it("rethrows non-Error failures as DatabaseError", async () => {
+    mockPrisma.team.findMany.mockRejectedValue("boom")
+
+    await expectRejection(
+      projectService.listTeams("u1"),
+      500,
+      "Unable to list teams"
+    )
+  })
+})
+
+describe("projectService.deleteTeam", () => {
+  it("rejects with 400 when teamId or userId is missing", async () => {
+    await expectRejection(
+      projectService.deleteTeam("", "u1"),
+      400,
+      "Team ID and user ID are required"
+    )
+    await expectRejection(
+      projectService.deleteTeam("t1", ""),
+      400,
+      "Team ID and user ID are required"
+    )
+    expect(mockPrisma.team.findUnique).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 404 when the team does not exist", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue(null)
+
+    await expectRejection(
+      projectService.deleteTeam("t1", "u1"),
+      404,
+      "Team not found"
+    )
+    expect(mockPrisma.team.delete).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 403 when the caller is not the owner", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+    })
+
+    await expectRejection(
+      projectService.deleteTeam("t1", "u2"),
+      403,
+      "Only the team owner can delete this team"
+    )
+    expect(mockPrisma.team.delete).not.toHaveBeenCalled()
+  })
+
+  it("deletes an owned team and logs the deletion", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+    })
+    mockPrisma.team.delete.mockResolvedValue({ id: "t1" })
+
+    const result = await projectService.deleteTeam("t1", "u1")
+
+    expect(result).toEqual({
+      id: "t1",
+      message: "Team deleted successfully",
+    })
+    expect(mockPrisma.team.delete).toHaveBeenCalledWith({
+      where: { id: "t1" },
+    })
+    expect(logger.info).toHaveBeenCalledWith(
+      "[TEAM_DELETE] Team t1 deleted by owner u1"
+    )
+  })
+
+  it("maps P2025 during delete to 404", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+    })
+    mockPrisma.team.delete.mockRejectedValue(
+      new PrismaClientKnownRequestError("gone", "P2025")
+    )
+
+    await expectRejection(
+      projectService.deleteTeam("t1", "u1"),
+      404,
+      "Team not found"
+    )
+  })
+})
+
+describe("projectService.removeMember", () => {
+  it("rejects with 400 when required ids are missing", async () => {
+    await expectRejection(
+      projectService.removeMember("", "u2", "u1"),
+      400,
+      "Team ID and user ID are required"
+    )
+    expect(mockPrisma.team.findUnique).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 404 when the team does not exist", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue(null)
+
+    await expectRejection(
+      projectService.removeMember("t1", "u2", "u1"),
+      404,
+      "Team not found"
+    )
+    expect(mockPrisma.teamMember.delete).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 404 when the target is not a member", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [{ id: "m1", userId: "u1" }],
+    })
+
+    await expectRejection(
+      projectService.removeMember("t1", "u9", "u1"),
+      404,
+      "Team member not found"
+    )
+    expect(mockPrisma.teamMember.delete).not.toHaveBeenCalled()
+  })
+
+  it("forbids a member from removing another member", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [
+        { id: "m1", userId: "u1" },
+        { id: "m2", userId: "u2" },
+      ],
+    })
+
+    await expectRejection(
+      projectService.removeMember("t1", "u1", "u2"),
+      403,
+      "Only the team owner can remove members"
+    )
+    expect(mockPrisma.teamMember.delete).not.toHaveBeenCalled()
+  })
+
+  it("forbids the owner from leaving the team", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [{ id: "m1", userId: "u1" }],
+    })
+
+    await expectRejection(
+      projectService.removeMember("t1", "u1", "u1"),
+      403,
+      "Owner cannot leave team; delete the team instead"
+    )
+    expect(mockPrisma.teamMember.delete).not.toHaveBeenCalled()
+  })
+
+  it("lets a member leave their own membership", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [
+        { id: "m1", userId: "u1" },
+        { id: "m2", userId: "u2" },
+      ],
+    })
+    mockPrisma.teamMember.delete.mockResolvedValue({ id: "m2" })
+
+    const result = await projectService.removeMember("t1", "u2", "u2")
+
+    expect(result).toEqual({
+      teamId: "t1",
+      userId: "u2",
+      message: "Member removed from team",
+    })
+    expect(mockPrisma.teamMember.delete).toHaveBeenCalledWith({
+      where: { id: "m2" },
+    })
+    expect(logger.info).toHaveBeenCalledWith(
+      "[TEAM_MEMBER_REMOVE] User u2 removed from team t1 by u2"
+    )
+  })
+
+  it("lets the owner remove any member", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [
+        { id: "m1", userId: "u1" },
+        { id: "m2", userId: "u2" },
+      ],
+    })
+    mockPrisma.teamMember.delete.mockResolvedValue({ id: "m2" })
+
+    const result = await projectService.removeMember("t1", "u2", "u1")
+
+    expect(result).toEqual({
+      teamId: "t1",
+      userId: "u2",
+      message: "Member removed from team",
+    })
+    expect(mockPrisma.teamMember.delete).toHaveBeenCalledWith({
+      where: { id: "m2" },
+    })
+  })
+
+  it("maps P2025 during delete to 404 Team member not found", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [
+        { id: "m1", userId: "u1" },
+        { id: "m2", userId: "u2" },
+      ],
+    })
+    mockPrisma.teamMember.delete.mockRejectedValue(
+      new PrismaClientKnownRequestError("gone", "P2025")
+    )
+
+    await expectRejection(
+      projectService.removeMember("t1", "u2", "u1"),
+      404,
+      "Team member not found"
+    )
+  })
+})
+
 describe("projectService.createProject", () => {
+  const hackathonId = "11111111-1111-4111-8111-111111111111"
+
   it("rejects with 400 when required fields are missing", async () => {
     await expectRejection(
       projectService.createProject({
@@ -229,6 +519,24 @@ describe("projectService.createProject", () => {
         category: "cat",
         tags: [],
         teamId: "t1",
+        hackathonId,
+        userId: "u1",
+      }),
+      400,
+      "All required project fields must be provided"
+    )
+    expect(mockPrisma.team.findUnique).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 400 when no hackathon is selected", async () => {
+    await expectRejection(
+      projectService.createProject({
+        title: "P",
+        description: "D",
+        category: "cat",
+        tags: [],
+        teamId: "t1",
+        hackathonId: "",
         userId: "u1",
       }),
       400,
@@ -247,6 +555,7 @@ describe("projectService.createProject", () => {
         category: "cat",
         tags: [],
         teamId: "missing",
+        hackathonId,
         userId: "u1",
       }),
       404,
@@ -269,10 +578,36 @@ describe("projectService.createProject", () => {
         category: "cat",
         tags: [],
         teamId: "t1",
+        hackathonId,
         userId: "u2",
       }),
       401,
       "You must be a member of the team to create a project"
+    )
+    expect(mockPrisma.project.create).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 400 when the user has not registered for the hackathon", async () => {
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      name: "Alpha",
+      ownerId: "u1",
+      members: [],
+    })
+    mockPrisma.hackathonRegistration.findUnique.mockResolvedValue(null)
+
+    await expectRejection(
+      projectService.createProject({
+        title: "P",
+        description: "D",
+        category: "cat",
+        tags: [],
+        teamId: "t1",
+        hackathonId,
+        userId: "u1",
+      }),
+      400,
+      "You must register for this hackathon before creating a project"
     )
     expect(mockPrisma.project.create).not.toHaveBeenCalled()
   })
@@ -284,6 +619,10 @@ describe("projectService.createProject", () => {
       ownerId: "owner",
       members: [{ userId: "u1" }],
     })
+    mockPrisma.hackathonRegistration.findUnique.mockResolvedValue({
+      userId: "u1",
+      hackathonId,
+    })
     const created = { id: "p1", title: "P", teamId: "t1" }
     mockPrisma.project.create.mockResolvedValue(created)
 
@@ -293,10 +632,14 @@ describe("projectService.createProject", () => {
       category: "cat",
       tags: ["a"],
       teamId: "t1",
+      hackathonId,
       userId: "u1",
     })
 
     expect(result).toEqual(created)
+    expect(mockPrisma.hackathonRegistration.findUnique).toHaveBeenCalledWith({
+      where: { userId_hackathonId: { userId: "u1", hackathonId } },
+    })
     expect(mockPrisma.project.create).toHaveBeenCalledWith({
       data: {
         title: "P",
@@ -304,6 +647,7 @@ describe("projectService.createProject", () => {
         category: "cat",
         tags: ["a"],
         teamId: "t1",
+        hackathonId,
       },
     })
     expect(logger.info).toHaveBeenCalledOnce()
@@ -316,6 +660,10 @@ describe("projectService.createProject", () => {
       ownerId: "u1",
       members: [],
     })
+    mockPrisma.hackathonRegistration.findUnique.mockResolvedValue({
+      userId: "u1",
+      hackathonId,
+    })
     mockPrisma.project.create.mockResolvedValue({ id: "p1", title: "P" })
 
     const result = await projectService.createProject({
@@ -324,6 +672,7 @@ describe("projectService.createProject", () => {
       category: "cat",
       tags: [],
       teamId: "t1",
+      hackathonId,
       userId: "u1",
     })
 
@@ -1235,30 +1584,67 @@ describe("userContext middleware", () => {
     expect(next).not.toHaveBeenCalled()
   })
 
-  it("populates req.user from identity headers and continues", () => {
+  it("populates req.user from identity headers and continues", async () => {
     const req = {
-      headers: { "x-user-id": "u1", "x-user-role": "JUDGE" },
+      headers: { "x-user-id": "acc-1", "x-user-role": "JUDGE" },
     } as any
     const res = mockRes()
     const next = vi.fn()
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "u1" })
 
-    userContext(req, res, next)
+    await userContext(req, res, next)
 
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+      where: { accountId: "acc-1" },
+    })
     expect(req.user).toEqual({ id: "u1", role: "JUDGE" })
     expect(next).toHaveBeenCalledOnce()
     expect(res.status).not.toHaveBeenCalled()
   })
 
-  it("defaults the role to user when x-user-role is absent (no 401)", () => {
-    const req = { headers: { "x-user-id": "u1" } } as any
+  it("defaults the role to user when x-user-role is absent (no 401)", async () => {
+    const req = { headers: { "x-user-id": "acc-1" } } as any
     const res = mockRes()
     const next = vi.fn()
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "u1" })
 
-    userContext(req, res, next)
+    await userContext(req, res, next)
 
     expect(req.user).toEqual({ id: "u1", role: "user" })
     expect(next).toHaveBeenCalledOnce()
     expect(res.status).not.toHaveBeenCalled()
+  })
+
+  it("responds 401 when the account has no user record", async () => {
+    const req = { headers: { "x-user-id": "ghost" } } as any
+    const res = mockRes()
+    const next = vi.fn()
+    mockPrisma.user.findUnique.mockResolvedValue(null)
+
+    await userContext(req, res, next)
+
+    expect(res.status).toHaveBeenCalledWith(401)
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: "Unauthorized: Unknown user identity",
+    })
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it("responds 500 when identity resolution fails", async () => {
+    const req = { headers: { "x-user-id": "acc-1" } } as any
+    const res = mockRes()
+    const next = vi.fn()
+    mockPrisma.user.findUnique.mockRejectedValue(new Error("db down"))
+
+    await userContext(req, res, next)
+
+    expect(res.status).toHaveBeenCalledWith(500)
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: "Internal server error",
+    })
+    expect(next).not.toHaveBeenCalled()
   })
 })
 

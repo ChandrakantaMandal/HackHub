@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   ShieldCheck,
+  Trophy,
   Users,
   X,
 } from "lucide-react"
@@ -20,6 +21,7 @@ import { Skeleton } from "@workspace/ui/components/skeleton"
 
 const NAV_ITEMS = [
   { href: "/overview", label: "Overview", icon: LayoutDashboard },
+  { href: "/hackathons", label: "Hackathons", icon: Trophy },
   { href: "/users", label: "Users", icon: Users },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/teams", label: "Teams", icon: Users },
@@ -112,7 +114,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (!user) {
+  if (!user || user.role !== "ADMIN") {
+    if (user) clearAdminUser()
     router.replace("/login")
     return null
   }

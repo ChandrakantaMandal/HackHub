@@ -122,7 +122,11 @@ export default function ShowcasePage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={sort} onValueChange={(v) => setSort(v ?? "newest")}>
+        <Select
+          value={sort}
+          items={SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          onValueChange={(v) => setSort(v ?? "newest")}
+        >
           <SelectTrigger className="w-full border-slate-800 bg-slate-950 text-slate-100 sm:w-40">
             <SelectValue placeholder="Sort" />
           </SelectTrigger>

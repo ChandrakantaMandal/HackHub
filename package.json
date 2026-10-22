@@ -15,7 +15,8 @@
     "lint:staged": "lint-staged",
     "db:generate": "pnpm --filter @workspace/database db:generate",
     "db:migrate": "pnpm --filter @workspace/database db:migrate",
-    "db:studio": "pnpm --filter @workspace/database db:studio"
+    "db:studio": "pnpm --filter @workspace/database db:studio",
+    "db:seed-admin": "pnpm --filter admin-service seed-admin"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

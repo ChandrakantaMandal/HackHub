@@ -23,6 +23,7 @@ const { mockPrisma, PrismaClientKnownRequestError, fetchMock } = vi.hoisted(
     return {
       mockPrisma: {
         account: prismaModel(),
+        user: prismaModel(),
         submission: prismaModel(),
         judge: prismaModel(),
         judgeScore: prismaModel(),
@@ -71,14 +72,6 @@ const fetchHttpError = (status: number, message?: string) =>
     json: async () => (message ? { message } : {}),
   })
 
-const validRegister = {
-  username: "judge1",
-  email: "judge@hackhub.dev",
-  password: "secret123",
-  confirmPassword: "secret123",
-  judgeCode: "JUDGE01",
-}
-
 const validScores = {
   innovation: 8,
   technical: 8,
@@ -105,97 +98,6 @@ describe("judge-service integration", () => {
     })
   })
 
-  describe("POST /api/judges/register (public)", () => {
-    it("returns 400 with field errors when judgeCode is missing", async () => {
-      const { judgeCode: _omit, ...withoutCode } = validRegister
-
-      const res = await request(app)
-        .post("/api/judges/register")
-        .send(withoutCode)
-
-      expect(res.status).toBe(400)
-      expect(res.body.success).toBe(false)
-      expect(res.body.error).toBe("Validation failed")
-      expect(res.body.fields.judgeCode).toBeDefined()
-      expect(fetchMock).not.toHaveBeenCalled()
-      expect(mockPrisma.account.findUnique).not.toHaveBeenCalled()
-    })
-
-    it("registers a judge via auth-service and ensures the Judge row", async () => {
-      const authPayload = { user: { id: "u1" }, accessToken: "jwt-token" }
-      fetchOk(authPayload)
-      mockPrisma.account.findUnique.mockResolvedValue({
-        user: { id: "u1", role: "JUDGE" },
-      })
-      mockPrisma.judge.upsert.mockResolvedValue({ id: "judge-1", userId: "u1" })
-
-      const res = await request(app)
-        .post("/api/judges/register")
-        .send(validRegister)
-
-      expect(res.status).toBe(201)
-      expect(res.body.success).toBe(true)
-      expect(res.body.message).toBe("Judge registration successful")
-      expect(res.body.data).toEqual(authPayload)
-      expect(fetchMock).toHaveBeenCalledWith(
-        "http://auth:6001/register",
-        expect.objectContaining({ method: "POST" })
-      )
-      expect(mockPrisma.judge.upsert).toHaveBeenCalledWith({
-        where: { userId: "u1" },
-        update: {},
-        create: { userId: "u1" },
-      })
-    })
-
-    it("returns 403 when the account was not promoted to JUDGE", async () => {
-      fetchOk({ user: { id: "u1" } })
-      mockPrisma.account.findUnique.mockResolvedValue({
-        user: { id: "u1", role: "user" },
-      })
-
-      const res = await request(app)
-        .post("/api/judges/register")
-        .send(validRegister)
-
-      expect(res.status).toBe(403)
-      expect(res.body).toEqual({
-        success: false,
-        message: "Judge code is invalid",
-      })
-      expect(mockPrisma.judge.upsert).not.toHaveBeenCalled()
-    })
-
-    it("passes the auth-service conflict message through as 409", async () => {
-      fetchHttpError(409, "Username already taken")
-
-      const res = await request(app)
-        .post("/api/judges/register")
-        .send(validRegister)
-
-      expect(res.status).toBe(409)
-      expect(res.body).toEqual({
-        success: false,
-        message: "Username already taken",
-      })
-      expect(mockPrisma.account.findUnique).not.toHaveBeenCalled()
-    })
-
-    it("returns 502 when the auth-service is unreachable", async () => {
-      fetchMock.mockRejectedValue(new Error("ECONNREFUSED"))
-
-      const res = await request(app)
-        .post("/api/judges/register")
-        .send(validRegister)
-
-      expect(res.status).toBe(502)
-      expect(res.body).toEqual({
-        success: false,
-        message: "Auth service unavailable",
-      })
-    })
-  })
-
   describe("POST /api/judges/login (public)", () => {
     it("logs in a judge and ensures the Judge row", async () => {
       const authPayload = { user: { id: "u1" }, accessToken: "jwt-token" }
@@ -212,7 +114,10 @@ describe("judge-service integration", () => {
       expect(res.status).toBe(200)
       expect(res.body.success).toBe(true)
       expect(res.body.message).toBe("Login successful")
-      expect(res.body.data).toEqual(authPayload)
+      expect(res.body.data).toEqual({
+        ...authPayload,
+        judge: { id: "judge-1" },
+      })
       expect(mockPrisma.judge.upsert).toHaveBeenCalledTimes(1)
     })
 
@@ -305,9 +210,10 @@ describe("judge-service integration", () => {
 
     it("upserts the score with the computed weighted finalScore", async () => {
       mockPrisma.submission.findUnique.mockResolvedValue({ id: "sub-1" })
+      mockPrisma.user.findUnique.mockResolvedValue({ id: "user-1" })
       mockPrisma.judge.upsert.mockResolvedValue({
         id: "judge-1",
-        userId: "judge-user-1",
+        userId: "user-1",
       })
       mockPrisma.judgeScore.upsert.mockResolvedValue({
         id: "score-1",
@@ -324,6 +230,11 @@ describe("judge-service integration", () => {
       expect(res.status).toBe(200)
       expect(res.body.success).toBe(true)
       expect(res.body.message).toBe("Score submitted successfully")
+      expect(mockPrisma.judge.upsert).toHaveBeenCalledWith({
+        where: { userId: "user-1" },
+        update: {},
+        create: { userId: "user-1" },
+      })
       expect(mockPrisma.judgeScore.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
@@ -374,10 +285,11 @@ describe("judge-service integration", () => {
 
     it("awards a badge attributed to the awarding judge", async () => {
       mockPrisma.submission.findUnique.mockResolvedValue({ id: "sub-1" })
+      mockPrisma.user.findUnique.mockResolvedValue({ id: "user-1" })
       mockPrisma.achievementBadge.create.mockResolvedValue({
         id: "badge-1",
         submissionId: "sub-1",
-        awardedById: "judge-user-1",
+        awardedById: "user-1",
         name: "Best UI",
         description: null,
       })
@@ -393,7 +305,7 @@ describe("judge-service integration", () => {
       expect(mockPrisma.achievementBadge.create).toHaveBeenCalledWith({
         data: {
           submissionId: "sub-1",
-          awardedById: "judge-user-1",
+          awardedById: "user-1",
           name: "Best UI",
           description: null,
         },
@@ -402,6 +314,7 @@ describe("judge-service integration", () => {
 
     it("returns 409 on a duplicate badge (P2002)", async () => {
       mockPrisma.submission.findUnique.mockResolvedValue({ id: "sub-1" })
+      mockPrisma.user.findUnique.mockResolvedValue({ id: "user-1" })
       mockPrisma.achievementBadge.create.mockRejectedValue(
         new PrismaClientKnownRequestError("Unique constraint failed", "P2002")
       )
@@ -433,6 +346,7 @@ describe("judge-service integration", () => {
     })
 
     it("returns 403 when a different judge tries to revoke", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: "user-1" })
       mockPrisma.achievementBadge.findFirst.mockResolvedValue({
         id: "badge-1",
         submissionId: "sub-1",
@@ -452,10 +366,11 @@ describe("judge-service integration", () => {
     })
 
     it("revokes a badge awarded by this judge", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: "user-1" })
       mockPrisma.achievementBadge.findFirst.mockResolvedValue({
         id: "badge-1",
         submissionId: "sub-1",
-        awardedById: "judge-user-1",
+        awardedById: "user-1",
       })
       mockPrisma.achievementBadge.delete.mockResolvedValue({ id: "badge-1" })
 

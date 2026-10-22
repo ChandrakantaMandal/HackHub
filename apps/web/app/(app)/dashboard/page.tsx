@@ -42,7 +42,10 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!hydrated) return
     let cancelled = false
-    Promise.all([apiGet<Team[]>("/teams"), apiGet<Project[]>("/projects")])
+    Promise.all([
+      apiGet<Team[]>("/projects/teams"),
+      apiGet<Project[]>("/projects"),
+    ])
       .then(([t, p]) => {
         if (cancelled) return
         setTeams(t)

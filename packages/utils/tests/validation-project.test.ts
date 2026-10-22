@@ -69,6 +69,7 @@ describe("createProjectSchema", () => {
     category: "FinTech",
     tags: ["typescript", "ai"],
     teamId: "team-1",
+    hackathonId: "3f1a2b3c-4d5e-6f70-8192-a3b4c5d6e7f8",
   }
 
   it("accepts valid input", () => {
@@ -105,6 +106,18 @@ describe("createProjectSchema", () => {
   it("rejects missing category", () => {
     const { category: _category, ...withoutCategory } = validProject
     expect(createProjectSchema.safeParse(withoutCategory).success).toBe(false)
+  })
+
+  it("rejects missing hackathonId", () => {
+    const { hackathonId: _hackathonId, ...withoutHackathon } = validProject
+    expect(createProjectSchema.safeParse(withoutHackathon).success).toBe(false)
+  })
+
+  it("rejects a non-uuid hackathonId", () => {
+    expect(
+      createProjectSchema.safeParse({ ...validProject, hackathonId: "h1" })
+        .success
+    ).toBe(false)
   })
 })
 

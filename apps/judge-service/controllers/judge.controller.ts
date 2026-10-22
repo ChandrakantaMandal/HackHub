@@ -2,19 +2,6 @@ import { Request, Response, NextFunction } from "express"
 import JudgeService from "../services/judge.service"
 
 class JudgeController {
-  async register(req: Request, res: Response, next: NextFunction) {
-    try {
-      const result = await JudgeService.register(req.body)
-      return res.status(201).json({
-        success: true,
-        message: "Judge registration successful",
-        data: result,
-      })
-    } catch (error) {
-      next(error)
-    }
-  }
-
   async login(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await JudgeService.login(req.body)

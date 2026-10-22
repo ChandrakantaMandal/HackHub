@@ -134,17 +134,6 @@ describe("api-gateway", () => {
   })
 
   describe("judge route guard", () => {
-    it("should proxy POST /api/judges/register without a token", async () => {
-      const res = await request(app).post("/api/judges/register").send({})
-
-      expect(res.status).toBe(200)
-      expect(res.body.proxied).toBe(true)
-      expect(res.body.target).toBe("http://localhost:5003")
-      expect(res.body.path).toBe("/register")
-      expect(res.body.method).toBe("POST")
-      expect(res.body.parseReqBody).toBe(false)
-    })
-
     it("should proxy POST /api/judges/login without a token", async () => {
       const res = await request(app).post("/api/judges/login").send({})
 

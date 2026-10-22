@@ -38,7 +38,17 @@ export const envSchema = z.object({
 
   CHAT_SERVICE_URL: z.string().url().default("http://localhost:5005"),
 
+  ADMIN_SERVICE_PORT: z.coerce.number().default(5006),
+
+  ADMIN_SERVICE_URL: z.string().url().default("http://localhost:5006"),
+
   JUDGE_CODES: z.string().default(""),
+
+  ADMIN_EMAIL: z.string().email().optional(),
+
+  ADMIN_PASSWORD: z.string().min(8).optional(),
+
+  ADMIN_USERNAME: z.string().min(3).optional(),
 
   API_URL: z.string().url().default("http://localhost:4000"),
 

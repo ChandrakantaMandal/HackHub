@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { motion, Variants } from "framer-motion"
 import {
@@ -10,8 +11,15 @@ import {
   CheckCircle2,
   ArrowRight,
   Sparkles,
+  Trophy,
+  MapPin,
+  CalendarDays,
 } from "lucide-react"
 
+import { apiGet } from "@/lib/client"
+import type { Hackathon } from "@/lib/types"
+import { useAppStore } from "@/store/useAppStore"
+import { useHydrated } from "@/lib/useHydrated"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
@@ -80,7 +88,28 @@ const itemVariants: Variants = {
   },
 }
 
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
 export default function LandingPage() {
+  const [hackathons, setHackathons] = useState<Hackathon[]>([])
+  const [hackathonsLoading, setHackathonsLoading] = useState(true)
+  const accessToken = useAppStore((state) => state.accessToken)
+  const hydrated = useHydrated()
+  const isAuthenticated = hydrated && Boolean(accessToken)
+
+  useEffect(() => {
+    apiGet<Hackathon[]>("/hackathons", false)
+      .then(setHackathons)
+      .catch(() => setHackathons([]))
+      .finally(() => setHackathonsLoading(false))
+  }, [])
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 selection:bg-purple-500 selection:text-white">
       {/* Header */}
@@ -108,13 +137,15 @@ export default function LandingPage() {
               Showcase
             </Link>
             <Button
-              render={<Link href="/signup" />}
+              render={
+                <Link href={isAuthenticated ? "/dashboard" : "/signup"} />
+              }
               nativeButton={false}
               variant="outline"
               size="sm"
               className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800 hover:text-white"
             >
-              Sign In
+              {isAuthenticated ? "Go To Dashboard" : "Sign In"}
             </Button>
           </div>
         </nav>
@@ -191,12 +222,14 @@ export default function LandingPage() {
               className="flex w-full flex-col justify-center gap-4 sm:w-auto sm:flex-row"
             >
               <Button
-                render={<Link href="/signup" />}
+                render={
+                  <Link href={isAuthenticated ? "/dashboard" : "/signup"} />
+                }
                 nativeButton={false}
                 size="lg"
                 className="h-12 gap-2 rounded-xl bg-purple-600 px-8 text-base text-white shadow-lg shadow-purple-600/25 hover:bg-purple-500"
               >
-                Get Started Free
+                {isAuthenticated ? "Go To Dashboard" : "Get Started Free"}
                 <Rocket className="h-4 w-4" />
               </Button>
               <Button
@@ -281,6 +314,105 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Active Hackathons Section */}
+      {!hackathonsLoading && hackathons.length > 0 && (
+        <section className="border-t border-slate-800/80 bg-slate-950 py-28">
+          <div className="mx-auto max-w-7xl px-6">
+            <motion.div
+              className="mb-16 text-center"
+              initial={{ y: 30, opacity: 0 }}
+              whileInView={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.5 }}
+              viewport={{ once: true }}
+            >
+              <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-5xl">
+                Happening{" "}
+                <span className="bg-gradient-to-r from-purple-400 to-amber-400 bg-clip-text text-transparent">
+                  now
+                </span>
+              </h2>
+              <p className="mx-auto max-w-2xl text-lg text-slate-400">
+                Register for an active hackathon, bring your team, and start
+                building today.
+              </p>
+            </motion.div>
+
+            <motion.div
+              className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
+              variants={containerVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+            >
+              {hackathons.map((hackathon) => (
+                <motion.div key={hackathon.id} variants={itemVariants}>
+                  <Card className="group h-full border-slate-800/80 bg-slate-900/60 transition-all duration-300 hover:border-purple-500/50 hover:shadow-xl hover:shadow-purple-500/5">
+                    <CardHeader>
+                      <div className="mb-4 flex items-center justify-between">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-400 transition-all duration-300 group-hover:scale-110 group-hover:bg-amber-600 group-hover:text-white">
+                          <Trophy className="h-6 w-6" />
+                        </div>
+                        <Badge
+                          variant="secondary"
+                          className="border border-purple-500/20 bg-purple-500/10 text-purple-300"
+                        >
+                          {hackathon.participantCount} participant
+                          {hackathon.participantCount === 1 ? "" : "s"}
+                        </Badge>
+                      </div>
+                      <CardTitle className="text-xl font-semibold text-slate-100">
+                        {hackathon.name}
+                      </CardTitle>
+                      {hackathon.tagline && (
+                        <CardDescription className="text-sm leading-relaxed text-slate-400">
+                          {hackathon.tagline}
+                        </CardDescription>
+                      )}
+                    </CardHeader>
+                    <CardContent className="flex h-[calc(100%-8rem)] flex-col gap-4">
+                      <div className="space-y-1.5 text-xs text-slate-500">
+                        <div className="flex items-center gap-2">
+                          <CalendarDays className="h-3.5 w-3.5" />
+                          {formatDate(hackathon.startDate)} –{" "}
+                          {formatDate(hackathon.endDate)}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-3.5 w-3.5" />
+                          {hackathon.location || "Online"}
+                        </div>
+                      </div>
+                      <div className="mt-auto">
+                        {hackathon.isRegistrationOpen ? (
+                          <Button
+                            render={
+                              <Link
+                                href={
+                                  isAuthenticated ? "/hackathons" : "/signup"
+                                }
+                              />
+                            }
+                            nativeButton={false}
+                            size="sm"
+                            className="w-full gap-2 rounded-xl bg-purple-600 text-white hover:bg-purple-500"
+                          >
+                            Register
+                            <ArrowRight className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <p className="text-center text-xs text-slate-600">
+                            Registration closed
+                          </p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </motion.div>
+          </div>
+        </section>
+      )}
+
       {/* CTA Section */}
       <section className="relative overflow-hidden py-24">
         <div className="relative z-10 mx-auto max-w-4xl px-6 text-center">
@@ -299,12 +431,14 @@ export default function LandingPage() {
               HackHub to bring ideas to life.
             </p>
             <Button
-              render={<Link href="/signup" />}
+              render={
+                <Link href={isAuthenticated ? "/dashboard" : "/signup"} />
+              }
               nativeButton={false}
               size="lg"
               className="h-12 gap-2 rounded-xl bg-purple-600 px-8 text-white shadow-lg shadow-purple-600/20 hover:bg-purple-500"
             >
-              Start Your Journey
+              {isAuthenticated ? "Go To Dashboard" : "Start Your Journey"}
               <ArrowRight className="h-4 w-4" />
             </Button>
           </motion.div>

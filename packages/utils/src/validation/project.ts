@@ -16,6 +16,7 @@ export const createProjectSchema = z.object({
   category: z.string(),
   tags: z.array(z.string()),
   teamId: z.string(),
+  hackathonId: z.string().uuid("A valid hackathon must be selected"),
 })
 
 export const updateProjectSchema = z.object({
@@ -29,6 +30,7 @@ export const updateProjectSchema = z.object({
 })
 
 export const createTaskSchema = z.object({
+  projectId: z.string().min(1, "Project ID is required"),
   title: z.string().min(1, "Task title is required"),
   description: z.string().optional(),
   assignedTo: z.string().optional(),

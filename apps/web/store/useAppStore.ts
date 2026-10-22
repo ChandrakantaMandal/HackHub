@@ -10,6 +10,7 @@ interface AuthState {
     id: string
     email: string
     user: {
+      id: string
       username: string
       role?: "PARTICIPANT" | "JUDGE" | "ADMIN"
       name?: string | null

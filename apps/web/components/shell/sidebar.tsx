@@ -8,11 +8,13 @@ import {
   Lightbulb,
   Users,
   Zap,
+  Trophy,
 } from "lucide-react"
 import { cn } from "@workspace/ui/lib/utils"
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/hackathons", label: "Hackathons", icon: Trophy },
   { href: "/teams", label: "Teams", icon: Users },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/showcase", label: "Showcase", icon: Lightbulb },

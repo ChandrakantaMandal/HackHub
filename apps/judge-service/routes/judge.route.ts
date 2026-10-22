@@ -5,20 +5,10 @@ import {
   userContext,
   requireJudge,
 } from "../middleware/judge.middleware"
-import {
-  judgeRegisterSchema,
-  loginSchema,
-  scoreSchema,
-  awardBadgeSchema,
-} from "@workspace/utils"
+import { loginSchema, scoreSchema, awardBadgeSchema } from "@workspace/utils"
 
 const router = Router()
 
-router.post(
-  "/register",
-  validate(judgeRegisterSchema),
-  JudgeController.register
-)
 router.post("/login", validate(loginSchema), JudgeController.login)
 
 router.use(userContext)

@@ -50,7 +50,7 @@ export const authRouteGuard = (req: any, res: Response, next: NextFunction) => {
   return authMiddleware(req, res, next)
 }
 
-const publicJudgePaths = new Set(["/register", "/login"])
+const publicJudgePaths = new Set(["/login"])
 
 export const judgeRouteGuard = (
   req: any,
@@ -71,6 +71,25 @@ export const showcaseRouteGuard = (
   next: NextFunction
 ) => {
   if (req.method === "GET") {
+    return next()
+  }
+  return authMiddleware(req, res, next)
+}
+
+// Hackathons: GETs are public (list, mine) — but if the client sent a token
+// we still verify it so the downstream service can personalize the response
+// (registered flags) with a trusted identity. Invalid tokens on GET are
+// rejected. Every mutation (register/join) requires a valid token.
+export const hackathonRouteGuard = (
+  req: any,
+  res: Response,
+  next: NextFunction
+) => {
+  if (req.method === "GET") {
+    const authHeader = req.headers.authorization
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      return authMiddleware(req, res, next)
+    }
     return next()
   }
   return authMiddleware(req, res, next)

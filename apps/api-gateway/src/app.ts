@@ -15,6 +15,7 @@ import {
   authRouteGuard,
   judgeRouteGuard,
   showcaseRouteGuard,
+  hackathonRouteGuard,
 } from "../middlewares/auth.middleware"
 
 const app = express()
@@ -93,7 +94,25 @@ app.use(
   })
 )
 
-// 3. Judge Service Routes (register/login stay public; everything else
+// 2b. Hackathon Routes (GETs public with optional token verification;
+// register/join require a valid token). Handled by project-service.
+app.use(
+  "/api/hackathons",
+  hackathonRouteGuard,
+  proxy(env.PROJECT_SERVICE_URL || "http://localhost:5002", {
+    parseReqBody: false,
+    proxyReqPathResolver: (req) => {
+      return req.originalUrl
+    },
+    userResDecorator: (_proxyRes, proxyResData, _userReq, userRes) => {
+      userRes.setHeader("Access-Control-Allow-Origin", env.CORS_ORIGIN)
+      userRes.setHeader("Access-Control-Allow-Credentials", "true")
+      return proxyResData
+    },
+  })
+)
+
+// 3. Judge Service Routes (login stays public; everything else
 // requires a valid token via the shared authMiddleware)
 app.use(
   "/api/judges",
@@ -135,6 +154,24 @@ app.use(
   "/api/chat",
   authMiddleware,
   proxy(env.CHAT_SERVICE_URL || "http://localhost:5005", {
+    parseReqBody: false,
+    proxyReqPathResolver: (req) => {
+      return req.originalUrl
+    },
+    userResDecorator: (_proxyRes, proxyResData, _userReq, userRes) => {
+      userRes.setHeader("Access-Control-Allow-Origin", env.CORS_ORIGIN)
+      userRes.setHeader("Access-Control-Allow-Credentials", "true")
+      return proxyResData
+    },
+  })
+)
+
+// 6. Admin Service Routes (all admin endpoints require a valid token; role
+// checks are enforced inside the admin service)
+app.use(
+  "/api/admin",
+  authMiddleware,
+  proxy(env.ADMIN_SERVICE_URL || "http://localhost:5006", {
     parseReqBody: false,
     proxyReqPathResolver: (req) => {
       return req.originalUrl

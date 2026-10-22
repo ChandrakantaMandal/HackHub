@@ -16,14 +16,6 @@ import {
   type LeaderboardRow,
 } from "../libs/scoring"
 
-interface RegisterDTO {
-  username: string
-  email: string
-  password: string
-  confirmPassword: string
-  judgeCode: string
-}
-
 interface LoginDTO {
   email: string
   password: string
@@ -64,27 +56,6 @@ const mapAuthError = (status: number, message?: string): Error => {
 }
 
 class JudgeService {
-  async register(data: RegisterDTO) {
-    const body = await this.callAuth("/register", data)
-
-    const account = await prisma.account.findUnique({
-      where: { email: data.email },
-      select: { user: { select: { id: true, role: true } } },
-    })
-
-    if (!account?.user) {
-      throw new AuthError("Judge registration failed")
-    }
-    if (account.user.role !== "JUDGE") {
-      throw new ForbiddenError("Judge code is invalid")
-    }
-
-    await this.ensureJudge(account.user.id)
-
-    logger.info("Judge registered", { userId: account.user.id })
-    return body.data
-  }
-
   async login(data: LoginDTO) {
     const body = await this.callAuth("/login", data)
 
@@ -97,9 +68,12 @@ class JudgeService {
       throw new ForbiddenError("Judge account required")
     }
 
-    await this.ensureJudge(account.user.id)
+    const judge = await this.ensureJudge(account.user.id)
 
-    return body.data
+    return {
+      ...(body.data as Record<string, unknown>),
+      judge: { id: judge.id },
+    }
   }
 
   async listSubmissions() {
@@ -135,7 +109,7 @@ class JudgeService {
     })
     if (!submission) throw new NotFoundError("Submission not found")
 
-    const judge = await this.ensureJudge(userId)
+    const judge = await this.ensureJudge(await this.resolveUserId(userId))
     const finalScore = computeFinalScore(scores)
 
     const result = await prisma.judgeScore.upsert({
@@ -177,11 +151,13 @@ class JudgeService {
     })
     if (!submission) throw new NotFoundError("Submission not found")
 
+    const awardedById = await this.resolveUserId(userId)
+
     try {
       const badge = await prisma.achievementBadge.create({
         data: {
           submissionId,
-          awardedById: userId,
+          awardedById,
           name,
           description: description ?? null,
         },
@@ -205,7 +181,9 @@ class JudgeService {
       where: { id: badgeId, submissionId },
     })
     if (!badge) throw new NotFoundError("Badge not found")
-    if (badge.awardedById !== userId) {
+
+    const awarderId = await this.resolveUserId(userId)
+    if (badge.awardedById !== awarderId) {
       throw new ForbiddenError("Only the awarding judge can revoke this badge")
     }
 
@@ -240,6 +218,15 @@ class JudgeService {
       update: {},
       create: { userId },
     })
+  }
+
+  private async resolveUserId(accountId: string) {
+    const user = await prisma.user.findUnique({
+      where: { accountId },
+      select: { id: true },
+    })
+    if (!user) throw new AuthError("Invalid user identity")
+    return user.id
   }
 
   private async callAuth(path: string, payload: unknown) {

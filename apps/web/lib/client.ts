@@ -25,7 +25,35 @@ interface RequestOptions {
   auth?: boolean
 }
 
-async function request<T>(path: string, options: RequestOptions): Promise<T> {
+async function tryRefreshTokens(): Promise<boolean> {
+  const { refreshToken, sessionId } = useAppStore.getState()
+  if (!refreshToken || !sessionId) return false
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken, sessionId }),
+    })
+    const body = (await res.json().catch(() => null)) as {
+      success?: boolean
+      data?: { accessToken?: string; refreshToken?: string }
+    } | null
+    if (!res.ok || !body?.success || !body.data?.accessToken) return false
+    useAppStore.setState({
+      accessToken: body.data.accessToken,
+      refreshToken: body.data.refreshToken ?? null,
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function request<T>(
+  path: string,
+  options: RequestOptions,
+  isRetry = false
+): Promise<T> {
   const { accessToken } = useAppStore.getState()
 
   const headers: Record<string, string> = {}
@@ -38,6 +66,19 @@ async function request<T>(path: string, options: RequestOptions): Promise<T> {
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   })
+
+  if (res.status === 401 && options.auth !== false && !isRetry) {
+    const refreshed = await tryRefreshTokens()
+    if (refreshed) {
+      return request<T>(path, options, true)
+    }
+    useAppStore.setState({
+      accessToken: null,
+      refreshToken: null,
+      sessionId: null,
+      user: null,
+    })
+  }
 
   const body = (await res.json().catch(() => null)) as {
     success?: boolean

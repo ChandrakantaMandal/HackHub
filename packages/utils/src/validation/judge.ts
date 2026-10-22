@@ -1,9 +1,4 @@
 import { z } from "zod"
-import { registerSchema } from "./auth"
-
-export const judgeRegisterSchema = registerSchema.safeExtend({
-  judgeCode: z.string().trim().min(1, "Judge code is required"),
-})
 
 export const scoreSchema = z.object({
   innovation: z.number().int().min(0).max(10),
@@ -19,6 +14,5 @@ export const awardBadgeSchema = z.object({
   description: z.string().max(500).optional(),
 })
 
-export type JudgeRegisterInput = z.infer<typeof judgeRegisterSchema>
 export type ScoreInput = z.infer<typeof scoreSchema>
 export type AwardBadgeInput = z.infer<typeof awardBadgeSchema>

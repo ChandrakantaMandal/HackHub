@@ -49,16 +49,64 @@ class ProjectController {
     }
   }
 
+  async listTeams(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+      const result = await ProjectService.listTeams(userId)
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async deleteTeam(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+      const result = await ProjectService.deleteTeam(
+        String(req.params.teamId),
+        userId
+      )
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async removeMember(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+      const result = await ProjectService.removeMember(
+        String(req.params.teamId),
+        String(req.params.userId),
+        userId
+      )
+      return res.status(200).json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
   async createProject(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = (req as any).user?.id
-      const { title, description, category, tags, teamId } = req.body
+      const { title, description, category, tags, teamId, hackathonId } =
+        req.body
       const result = await ProjectService.createProject({
         title,
         description,
         category,
         tags,
         teamId,
+        hackathonId,
         userId,
       })
       return res.status(201).json({
