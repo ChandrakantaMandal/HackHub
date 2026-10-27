@@ -17,6 +17,7 @@
     "@workspace/config": "workspace:*",
     "@workspace/database": "workspace:*",
     "@workspace/error-handler": "workspace:*",
+    "@workspace/imagekit": "workspace:*",
     "@workspace/logger": "workspace:*",
     "@workspace/redis": "workspace:*",
     "@workspace/telemetry": "workspace:*",

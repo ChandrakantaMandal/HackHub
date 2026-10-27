@@ -39,6 +39,16 @@ export interface HackathonPublic {
   isRegistrationOpen: boolean
 }
 
+export interface TeamLeaderboardEntry {
+  rank: number
+  teamId: string
+  teamName: string
+  projectId: string
+  projectTitle: string
+  averageScore: number
+  judgeCount: number
+}
+
 const uuidSchema = z.string().uuid()
 
 // Public payload: joinCode is deliberately omitted — it is only revealed to
@@ -118,6 +128,75 @@ class HackathonService {
     } catch (error) {
       if (error instanceof Error) throw error
       throw new DatabaseError("Unable to list your hackathons", error)
+    }
+  }
+
+  // Public team rankings for one hackathon: each team's project is ranked by
+  // the average judge finalScore (0-100). Teams without judge scores are
+  // omitted so unscored projects never dilute the board.
+  async getLeaderboard(hackathonId: string): Promise<TeamLeaderboardEntry[]> {
+    try {
+      if (!uuidSchema.safeParse(hackathonId).success) {
+        throw new ValidationError("Invalid hackathon id")
+      }
+
+      const hackathon = await prisma.hackathon.findUnique({
+        where: { id: hackathonId },
+        select: { id: true },
+      })
+      if (!hackathon) {
+        throw new NotFoundError("Hackathon not found")
+      }
+
+      const projects = await prisma.project.findMany({
+        where: { hackathonId },
+        select: {
+          id: true,
+          title: true,
+          team: { select: { id: true, name: true } },
+          submission: {
+            select: { judgeScores: { select: { finalScore: true } } },
+          },
+        },
+      })
+
+      const scored = projects
+        .map((project) => {
+          const scores =
+            project.submission?.judgeScores.map((s) => s.finalScore) ?? []
+          if (scores.length === 0) return null
+          const total = scores.reduce((sum, score) => sum + score, 0)
+          return {
+            teamId: project.team.id,
+            teamName: project.team.name,
+            projectId: project.id,
+            projectTitle: project.title,
+            averageScore: Math.round((total / scores.length) * 100) / 100,
+            judgeCount: scores.length,
+          }
+        })
+        .filter(
+          (row): row is Omit<TeamLeaderboardEntry, "rank"> => row !== null
+        )
+        .sort(
+          (a, b) =>
+            b.averageScore - a.averageScore ||
+            a.teamName.localeCompare(b.teamName)
+        )
+
+      // Competition ranking: equal scores share a rank, the next rank skips.
+      let previousScore: number | null = null
+      let previousRank = 0
+      return scored.map((row, index) => {
+        const rank =
+          row.averageScore === previousScore ? previousRank : index + 1
+        previousScore = row.averageScore
+        previousRank = rank
+        return { ...row, rank }
+      })
+    } catch (error) {
+      if (error instanceof Error) throw error
+      throw new DatabaseError("Unable to load the leaderboard", error)
     }
   }
 

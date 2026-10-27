@@ -1,10 +1,20 @@
 "use client"
 
 import { usePathname, useRouter } from "next/navigation"
-import { Menu, LogOut, User as UserIcon, ExternalLink } from "lucide-react"
+import {
+  Menu,
+  LogOut,
+  User as UserIcon,
+  ExternalLink,
+  UserRound,
+} from "lucide-react"
 import { useAppStore } from "@/store/useAppStore"
 import { useHydrated } from "@/lib/useHydrated"
-import { Avatar, AvatarFallback } from "@workspace/ui/components/avatar"
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@workspace/ui/components/avatar"
 import { Button } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
@@ -18,8 +28,10 @@ import {
 function pageTitle(pathname: string): string {
   if (pathname.startsWith("/dashboard")) return "Dashboard"
   if (pathname.startsWith("/teams")) return "Teams"
+  if (pathname.startsWith("/chat")) return "Chat"
   if (pathname.startsWith("/projects")) return "Projects"
   if (pathname.startsWith("/showcase")) return "Showcase"
+  if (pathname.startsWith("/profile")) return "Profile"
   return "HackHub"
 }
 
@@ -65,6 +77,13 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
         <DropdownMenu>
           <DropdownMenuTrigger className="outline-none">
             <Avatar className="h-8 w-8">
+              {hydrated && user?.user.avatar ? (
+                <AvatarImage
+                  src={user.user.avatar}
+                  alt={username || "Avatar"}
+                  className="border-none"
+                />
+              ) : null}
               <AvatarFallback className="bg-violet-600/20 text-xs font-semibold text-violet-300">
                 {initial}
               </AvatarFallback>
@@ -82,6 +101,10 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
               )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push("/profile")}>
+              <UserRound className="mr-2 h-4 w-4" />
+              Profile
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => router.push("/dashboard")}>
               <UserIcon className="mr-2 h-4 w-4" />
               Dashboard

@@ -208,7 +208,7 @@ describe("project-service integration", () => {
       expect(res.status).toBe(403)
       expect(res.body).toEqual({
         success: false,
-        message: "Only the team owner can delete this team",
+        message: "Only the team leader can delete this team",
       })
       expect(mockPrisma.team.delete).not.toHaveBeenCalled()
     })
@@ -282,7 +282,7 @@ describe("project-service integration", () => {
       expect(res.status).toBe(403)
       expect(res.body).toEqual({
         success: false,
-        message: "Only the team owner can remove members",
+        message: "Only the team leader can remove members",
       })
       expect(mockPrisma.teamMember.delete).not.toHaveBeenCalled()
     })
@@ -350,7 +350,7 @@ describe("project-service integration", () => {
       expect(res.status).toBe(403)
       expect(res.body).toEqual({
         success: false,
-        message: "Owner cannot leave team; delete the team instead",
+        message: "Leader cannot leave team; delete the team instead",
       })
       expect(mockPrisma.teamMember.delete).not.toHaveBeenCalled()
     })
@@ -570,6 +570,84 @@ describe("project-service integration", () => {
             where: { userId: "user-1" },
           })
         )
+      })
+    })
+
+    describe("GET /api/hackathons/:id/leaderboard", () => {
+      it("returns ranked teams anonymously", async () => {
+        mockPrisma.hackathon.findUnique.mockResolvedValue({
+          id: H_ID,
+          name: "Spring Hack",
+        })
+        mockPrisma.project.findMany.mockResolvedValue([
+          {
+            id: "proj-1",
+            title: "Alpha App",
+            team: { id: "team-2", name: "Beta Builders" },
+            submission: {
+              judgeScores: [{ finalScore: 90 }, { finalScore: 80 }],
+            },
+          },
+          {
+            id: "proj-2",
+            title: "Beta App",
+            team: { id: "team-1", name: "Alpha Coders" },
+            submission: { judgeScores: [{ finalScore: 70 }] },
+          },
+          {
+            id: "proj-3",
+            title: "Draft App",
+            team: { id: "team-3", name: "Draft Team" },
+            submission: null,
+          },
+        ])
+
+        const res = await request(app).get(
+          `/api/hackathons/${H_ID}/leaderboard`
+        )
+
+        expect(res.status).toBe(200)
+        expect(res.body.success).toBe(true)
+        expect(res.body.data).toHaveLength(2)
+        expect(res.body.data[0]).toMatchObject({
+          rank: 1,
+          teamId: "team-2",
+          teamName: "Beta Builders",
+          projectTitle: "Alpha App",
+          averageScore: 85,
+          judgeCount: 2,
+        })
+        expect(res.body.data[1]).toMatchObject({
+          rank: 2,
+          teamId: "team-1",
+          averageScore: 70,
+        })
+      })
+
+      it("returns 400 for an invalid hackathon id", async () => {
+        const res = await request(app).get(
+          "/api/hackathons/not-a-uuid/leaderboard"
+        )
+
+        expect(res.status).toBe(400)
+        expect(res.body).toEqual({
+          success: false,
+          message: "Invalid hackathon id",
+        })
+      })
+
+      it("returns 404 when the hackathon does not exist", async () => {
+        mockPrisma.hackathon.findUnique.mockResolvedValue(null)
+
+        const res = await request(app).get(
+          `/api/hackathons/${H_ID}/leaderboard`
+        )
+
+        expect(res.status).toBe(404)
+        expect(res.body).toEqual({
+          success: false,
+          message: "Hackathon not found",
+        })
       })
     })
 
@@ -795,12 +873,12 @@ describe("project-service integration", () => {
       mockPrisma.project.findUnique.mockResolvedValue({
         id: "proj-1",
         teamId: "team-1",
-        team: {
-          id: "team-1",
-          ownerId: "user-1",
-          members: [{ userId: "user-1" }],
-        },
         submission: null,
+      })
+      mockPrisma.team.findUnique.mockResolvedValue({
+        id: "team-1",
+        ownerId: "user-1",
+        members: [{ userId: "user-1" }],
       })
       mockPrisma.submission.create.mockResolvedValue({
         id: "sub-1",
@@ -822,16 +900,41 @@ describe("project-service integration", () => {
       expect(mockPrisma.submission.create).toHaveBeenCalledTimes(1)
     })
 
+    it("returns 403 when a non-leader member tries to submit", async () => {
+      mockPrisma.project.findUnique.mockResolvedValue({
+        id: "proj-1",
+        teamId: "team-1",
+        submission: null,
+      })
+      mockPrisma.team.findUnique.mockResolvedValue({
+        id: "team-1",
+        ownerId: "user-1",
+        members: [{ userId: "user-1" }, { userId: "user-2" }],
+      })
+
+      const res = await request(app)
+        .post("/api/projects/submit")
+        .set(asUser("user-2"))
+        .send({ projectId: "proj-1", githubUrl: "https://github.com/u/r" })
+
+      expect(res.status).toBe(403)
+      expect(res.body).toEqual({
+        success: false,
+        message: "Only the team leader can submit the project",
+      })
+      expect(mockPrisma.submission.create).not.toHaveBeenCalled()
+    })
+
     it("returns 409 when the project was already submitted", async () => {
       mockPrisma.project.findUnique.mockResolvedValue({
         id: "proj-1",
         teamId: "team-1",
-        team: {
-          id: "team-1",
-          ownerId: "user-1",
-          members: [{ userId: "user-1" }],
-        },
         submission: null,
+      })
+      mockPrisma.team.findUnique.mockResolvedValue({
+        id: "team-1",
+        ownerId: "user-1",
+        members: [{ userId: "user-1" }],
       })
       mockPrisma.submission.create.mockRejectedValue(
         new PrismaClientKnownRequestError("Unique constraint failed", "P2002")
@@ -866,6 +969,17 @@ describe("project-service integration", () => {
     })
 
     it("updates task status and returns recomputed progress", async () => {
+      mockPrisma.task.findUnique.mockResolvedValue({
+        id: "t1",
+        projectId: "proj-1",
+        assignedTo: "user-1",
+        project: { teamId: "team-1" },
+      })
+      mockPrisma.team.findUnique.mockResolvedValue({
+        id: "team-1",
+        ownerId: "user-1",
+        members: [{ userId: "user-1" }],
+      })
       mockPrisma.task.update.mockResolvedValue({
         id: "t1",
         projectId: "proj-1",
@@ -884,7 +998,7 @@ describe("project-service integration", () => {
       expect(res.status).toBe(200)
       expect(res.body.success).toBe(true)
       expect(res.body.data.message).toBe("Task updated successfully")
-      expect(res.body.data.task.status).toBe("IN_PROGRESS")
+      expect(res.body.data.task.status).toBe("in_progress")
       expect(res.body.data.progress).toBe(50)
       expect(mockPrisma.task.update).toHaveBeenCalledWith(
         expect.objectContaining({

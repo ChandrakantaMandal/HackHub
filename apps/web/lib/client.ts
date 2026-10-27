@@ -1,6 +1,6 @@
 import { useAppStore } from "@/store/useAppStore"
 
-const GATEWAY_URL =
+export const GATEWAY_URL =
   process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8080"
 
 export class ApiError extends Error {
@@ -25,7 +25,7 @@ interface RequestOptions {
   auth?: boolean
 }
 
-async function tryRefreshTokens(): Promise<boolean> {
+export async function tryRefreshTokens(): Promise<boolean> {
   const { refreshToken, sessionId } = useAppStore.getState()
   if (!refreshToken || !sessionId) return false
   try {

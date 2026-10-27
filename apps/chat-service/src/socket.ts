@@ -5,7 +5,12 @@ import { env } from "@workspace/config"
 import prisma from "@workspace/database"
 import { ForbiddenError } from "@workspace/error-handler"
 import { authorizeRoomAccess } from "../libs/rooms"
-import { ensureRoom, saveMessage } from "../services/chat.service"
+import { resolveUser } from "../libs/identity"
+import {
+  ensureRoom,
+  saveMessage,
+  touchRoomRead,
+} from "../services/chat.service"
 
 type AuthedSocket = Socket & {
   data: { user: { id: string; role: string } }
@@ -45,7 +50,9 @@ export const setupChatSocket = (server: HTTPServer) => {
 
   // Chat service is the exception to the "gateway-only JWT" rule: the gateway
   // only proxies the HTTP upgrade, so the handshake token is verified here.
-  io.use((socket, next) => {
+  // payload.id is the *account* id (JWT subject); resolve it to the User row so
+  // authorization compares against User.id — same mapping as the REST path.
+  io.use(async (socket, next) => {
     try {
       const auth = socket.handshake.auth as { token?: string }
       const header = socket.handshake.headers.authorization
@@ -56,10 +63,9 @@ export const setupChatSocket = (server: HTTPServer) => {
       if (!token) return next(new Error("Unauthorized"))
 
       const payload = verifyAccessToken(token, env.ACCESS_SECRET)
-      ;(socket as AuthedSocket).data.user = {
-        id: payload.id,
-        role: payload.role ?? "PARTICIPANT",
-      }
+      const user = await resolveUser(payload.id)
+      if (!user) return next(new Error("Unauthorized"))
+      ;(socket as AuthedSocket).data.user = user
       next()
     } catch {
       next(new Error("Unauthorized"))
@@ -88,7 +94,9 @@ export const setupChatSocket = (server: HTTPServer) => {
             return
           }
 
-          await ensureRoom(room)
+          // Joining/focusing a room marks it read (upserts the read cursor).
+          // touchRoomRead also lazily creates the room if needed.
+          await touchRoomRead(userId, room)
           authed.join(room)
           addPresence(room, authed.id, userId)
           authed.emit("joined", { room, online: onlineUsers(room) })

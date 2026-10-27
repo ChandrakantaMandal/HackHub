@@ -126,13 +126,13 @@ describe("projectService.createTeam", () => {
     expect(mockPrisma.team.create).not.toHaveBeenCalled()
   })
 
-  it("creates a team with a generated invite code and OWNER membership", async () => {
+  it("creates a team with a generated invite code and LEADER membership", async () => {
     const created = {
       id: "t1",
       name: "Alpha",
       inviteCode: "ABC123",
       ownerId: "u1",
-      members: [{ userId: "u1", role: "OWNER" }],
+      members: [{ userId: "u1", role: "LEADER" }],
     }
     mockPrisma.team.create.mockResolvedValue(created)
 
@@ -148,7 +148,7 @@ describe("projectService.createTeam", () => {
         inviteCode: expect.stringMatching(/^[A-Z0-9]{1,6}$/),
         ownerId: "u1",
         members: {
-          create: { userId: "u1", role: "OWNER" },
+          create: { userId: "u1", role: "LEADER" },
         },
       },
       include: { members: true },
@@ -326,7 +326,7 @@ describe("projectService.deleteTeam", () => {
     await expectRejection(
       projectService.deleteTeam("t1", "u2"),
       403,
-      "Only the team owner can delete this team"
+      "Only the team leader can delete this team"
     )
     expect(mockPrisma.team.delete).not.toHaveBeenCalled()
   })
@@ -418,7 +418,7 @@ describe("projectService.removeMember", () => {
     await expectRejection(
       projectService.removeMember("t1", "u1", "u2"),
       403,
-      "Only the team owner can remove members"
+      "Only the team leader can remove members"
     )
     expect(mockPrisma.teamMember.delete).not.toHaveBeenCalled()
   })
@@ -433,7 +433,7 @@ describe("projectService.removeMember", () => {
     await expectRejection(
       projectService.removeMember("t1", "u1", "u1"),
       403,
-      "Owner cannot leave team; delete the team instead"
+      "Leader cannot leave team; delete the team instead"
     )
     expect(mockPrisma.teamMember.delete).not.toHaveBeenCalled()
   })
@@ -653,7 +653,7 @@ describe("projectService.createProject", () => {
     expect(logger.info).toHaveBeenCalledOnce()
   })
 
-  it("creates a project when the user is the team owner", async () => {
+  it("creates a project when the user is the team leader", async () => {
     mockPrisma.team.findUnique.mockResolvedValue({
       id: "t1",
       name: "Alpha",
@@ -696,6 +696,17 @@ describe("projectService.updateTaskStatus", () => {
   })
 
   it("maps P2025 to a 404 Task not found", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: "u1",
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [{ userId: "u1" }],
+    })
     mockPrisma.task.update.mockRejectedValue(
       new PrismaClientKnownRequestError("Record not found", "P2025")
     )
@@ -711,7 +722,176 @@ describe("projectService.updateTaskStatus", () => {
     )
   })
 
+  it("rejects with 401 when the user is not a team member", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: "someone",
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "someone-else" }],
+    })
+
+    await expectRejection(
+      projectService.updateTaskStatus({
+        taskId: "tk1",
+        status: "todo",
+        userId: "u1",
+      }),
+      401,
+      "You must be a member of the team to perform this action"
+    )
+    expect(mockPrisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 403 when a non-assignee member tries to change status", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: "assignee",
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "assignee" }, { userId: "u1" }],
+    })
+
+    await expectRejection(
+      projectService.updateTaskStatus({
+        taskId: "tk1",
+        status: "completed",
+        userId: "u1",
+      }),
+      403,
+      "Only the assigned member can change this task's status"
+    )
+    expect(mockPrisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 403 when the leader tries to change an assigned task's status", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: "assignee",
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "assignee" }],
+    })
+
+    await expectRejection(
+      projectService.updateTaskStatus({
+        taskId: "tk1",
+        status: "completed",
+        userId: "owner",
+      }),
+      403,
+      "Only the assigned member can change this task's status"
+    )
+    expect(mockPrisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 403 when a non-leader changes an unassigned task's status", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: null,
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "u1" }],
+    })
+
+    await expectRejection(
+      projectService.updateTaskStatus({
+        taskId: "tk1",
+        status: "completed",
+        userId: "u1",
+      }),
+      403,
+      "Only the team leader can change the status of an unassigned task"
+    )
+    expect(mockPrisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it("allows the leader to change an unassigned task's status", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: null,
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "u1" }],
+    })
+    mockPrisma.task.update.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      status: "DONE",
+    })
+    mockPrisma.task.findMany.mockResolvedValue([{ status: "DONE" }])
+
+    const result = await projectService.updateTaskStatus({
+      taskId: "tk1",
+      status: "completed",
+      userId: "owner",
+    })
+
+    expect(result.task.status).toBe("completed")
+    expect(result.progress).toBe(100)
+  })
+
+  it("allows the assignee (non-leader) to change their own task status", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: "u1",
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "u1" }],
+    })
+    mockPrisma.task.update.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      status: "DONE",
+    })
+    mockPrisma.task.findMany.mockResolvedValue([{ status: "DONE" }])
+
+    const result = await projectService.updateTaskStatus({
+      taskId: "tk1",
+      status: "completed",
+      userId: "u1",
+    })
+
+    expect(result.task.status).toBe("completed")
+    expect(result.progress).toBe(100)
+  })
+
   it("maps the status to IN_PROGRESS and recomputes progress", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: "u1",
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [{ userId: "u1" }],
+    })
     mockPrisma.task.update.mockResolvedValue({
       id: "tk1",
       projectId: "p1",
@@ -738,10 +918,21 @@ describe("projectService.updateTaskStatus", () => {
     })
     expect(result.progress).toBe(67)
     expect(result.message).toBe("Task updated successfully")
-    expect(result.task.status).toBe("IN_PROGRESS")
+    expect(result.task.status).toBe("in_progress")
   })
 
   it("reports 100 progress when all tasks are DONE", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: "u1",
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [{ userId: "u1" }],
+    })
     mockPrisma.task.update.mockResolvedValue({
       id: "tk1",
       projectId: "p1",
@@ -792,8 +983,64 @@ describe("projectService.submitProject", () => {
     )
   })
 
+  it("rejects with 401 when the user is not a team member", async () => {
+    mockPrisma.project.findUnique.mockResolvedValue({
+      id: "p1",
+      teamId: "t1",
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "someone-else" }],
+    })
+
+    await expectRejection(
+      projectService.submitProject({
+        projectId: "p1",
+        githubUrl: "https://github.com/u/r",
+        liveDemoUrl: "",
+        userId: "u1",
+      }),
+      401,
+      "You must be a member of the team to perform this action"
+    )
+    expect(mockPrisma.submission.create).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 403 when a non-leader member tries to submit", async () => {
+    mockPrisma.project.findUnique.mockResolvedValue({
+      id: "p1",
+      teamId: "t1",
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "u1" }],
+    })
+
+    await expectRejection(
+      projectService.submitProject({
+        projectId: "p1",
+        githubUrl: "https://github.com/u/r",
+        liveDemoUrl: "",
+        userId: "u1",
+      }),
+      403,
+      "Only the team leader can submit the project"
+    )
+    expect(mockPrisma.submission.create).not.toHaveBeenCalled()
+  })
+
   it("maps P2002 to a 409 duplicate submission error", async () => {
-    mockPrisma.project.findUnique.mockResolvedValue({ id: "p1" })
+    mockPrisma.project.findUnique.mockResolvedValue({
+      id: "p1",
+      teamId: "t1",
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [{ userId: "u1" }],
+    })
     mockPrisma.submission.create.mockRejectedValue(
       new PrismaClientKnownRequestError("Unique constraint failed", "P2002")
     )
@@ -811,7 +1058,15 @@ describe("projectService.submitProject", () => {
   })
 
   it("creates a PENDING submission with null liveUrl when liveDemoUrl is empty", async () => {
-    mockPrisma.project.findUnique.mockResolvedValue({ id: "p1" })
+    mockPrisma.project.findUnique.mockResolvedValue({
+      id: "p1",
+      teamId: "t1",
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [{ userId: "u1" }],
+    })
     const submission = { id: "s1", projectId: "p1", status: "PENDING" }
     mockPrisma.submission.create.mockResolvedValue(submission)
 
@@ -837,7 +1092,15 @@ describe("projectService.submitProject", () => {
   })
 
   it("stores the live demo URL when provided", async () => {
-    mockPrisma.project.findUnique.mockResolvedValue({ id: "p1" })
+    mockPrisma.project.findUnique.mockResolvedValue({
+      id: "p1",
+      teamId: "t1",
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "u1",
+      members: [{ userId: "u1" }],
+    })
     mockPrisma.submission.create.mockResolvedValue({ id: "s1" })
 
     await projectService.submitProject({
@@ -1323,10 +1586,33 @@ describe("projectService.createTask", () => {
         assignedTo: null,
       },
     })
-    expect(result.task).toEqual(created)
+    expect(result.task).toEqual({ ...created, status: "todo" })
     expect(result.progress).toBe(50)
     expect(result.message).toBe("Task created successfully")
     expect(logger.info).toHaveBeenCalledOnce()
+  })
+
+  it("rejects with 403 when a non-leader member tries to create a task", async () => {
+    mockPrisma.project.findUnique.mockResolvedValue({
+      id: "p1",
+      teamId: "t1",
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "u1" }],
+    })
+
+    await expectRejection(
+      projectService.createTask({
+        projectId: "p1",
+        userId: "u1",
+        title: "Task",
+      }),
+      403,
+      "Only the team leader can create tasks"
+    )
+    expect(mockPrisma.task.create).not.toHaveBeenCalled()
   })
 })
 
@@ -1453,6 +1739,140 @@ describe("projectService.updateTask", () => {
     expect(result.progress).toBe(50)
     expect(result.message).toBe("Task updated successfully")
     expect(logger.info).toHaveBeenCalledOnce()
+  })
+
+  it("rejects with 403 when a non-leader member tries to reassign a task", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: "u1",
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "u1" }],
+    })
+
+    await expectRejection(
+      projectService.updateTask({
+        taskId: "tk1",
+        userId: "u1",
+        assignedTo: "owner",
+      }),
+      403,
+      "Only the team leader can reassign tasks"
+    )
+    expect(mockPrisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 403 when a non-assignee member tries to change status", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: "someone-else",
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "u1" }],
+    })
+
+    await expectRejection(
+      projectService.updateTask({
+        taskId: "tk1",
+        userId: "u1",
+        status: "completed",
+      }),
+      403,
+      "Only the assigned member can change this task's status"
+    )
+    expect(mockPrisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 403 when the leader tries to change an assigned task's status", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: "someone-else",
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "u1" }],
+    })
+
+    await expectRejection(
+      projectService.updateTask({
+        taskId: "tk1",
+        userId: "owner",
+        status: "completed",
+      }),
+      403,
+      "Only the assigned member can change this task's status"
+    )
+    expect(mockPrisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects with 403 when a non-leader changes an unassigned task's status", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: null,
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "u1" }],
+    })
+
+    await expectRejection(
+      projectService.updateTask({
+        taskId: "tk1",
+        userId: "u1",
+        status: "completed",
+      }),
+      403,
+      "Only the team leader can change the status of an unassigned task"
+    )
+    expect(mockPrisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it("allows the assignee (non-leader) to change their own task status", async () => {
+    mockPrisma.task.findUnique.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      assignedTo: "u1",
+      project: { teamId: "t1" },
+    })
+    mockPrisma.team.findUnique.mockResolvedValue({
+      id: "t1",
+      ownerId: "owner",
+      members: [{ userId: "owner" }, { userId: "u1" }],
+    })
+    mockPrisma.task.update.mockResolvedValue({
+      id: "tk1",
+      projectId: "p1",
+      status: "DONE",
+      assignedTo: "u1",
+    })
+    mockPrisma.task.findMany.mockResolvedValue([{ status: "DONE" }])
+
+    const result = await projectService.updateTask({
+      taskId: "tk1",
+      userId: "u1",
+      status: "completed",
+    })
+
+    expect(mockPrisma.task.update).toHaveBeenCalledWith({
+      where: { id: "tk1" },
+      data: { status: "DONE" },
+    })
+    expect(result.task.status).toBe("completed")
+    expect(result.progress).toBe(100)
   })
 
   it("maps P2025 to a 404 Task not found", async () => {

@@ -12,7 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@workspace/ui/components/sheet"
-import { SidebarBrand, SidebarNav } from "./sidebar"
+import { SidebarBrand, SidebarFooter, SidebarNav } from "./sidebar"
 import { Topbar } from "./topbar"
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -38,9 +38,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-800 bg-slate-900/50 md:flex">
         <SidebarBrand />
         <Separator className="bg-slate-800" />
-        <div className="mt-4 flex-1">
+        <div className="mt-4 flex-1 overflow-y-auto">
           <SidebarNav />
         </div>
+        <SidebarFooter />
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -53,9 +54,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </SheetHeader>
           <SidebarBrand />
           <Separator className="bg-slate-800" />
-          <div className="mt-4">
+          <div className="mt-4 flex flex-1 flex-col overflow-y-auto">
             <SidebarNav onNavigate={() => setMobileOpen(false)} />
           </div>
+          <SidebarFooter onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
       </Sheet>
 

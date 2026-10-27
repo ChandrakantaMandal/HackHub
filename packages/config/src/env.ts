@@ -58,6 +58,14 @@ export const envSchema = z.object({
 
   GMAIL_APP_PASSWORD: z.string(),
 
+  // ImageKit (avatar/image storage). Optional so services boot without them;
+  // upload endpoints return a clear error when they are missing.
+  IMAGEKIT_PUBLIC_KEY: z.string().optional(),
+
+  IMAGEKIT_PRIVATE_KEY: z.string().optional(),
+
+  IMAGEKIT_URL_ENDPOINT: z.string().optional(),
+
   LOG_LEVEL: z
     .enum(["error", "warn", "info", "http", "verbose", "debug", "silly"])
     .default("info"),

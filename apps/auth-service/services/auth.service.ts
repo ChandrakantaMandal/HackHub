@@ -5,6 +5,7 @@ import {
   ValidationError,
   AuthError,
   NotFoundError,
+  BadRequestError,
   DatabaseError,
 } from "@workspace/error-handler"
 
@@ -12,8 +13,14 @@ import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
+  type UpdateProfileInput,
 } from "@workspace/utils"
 import { env } from "@workspace/config"
+import {
+  uploadImage,
+  decodeBase64Image,
+  isImageKitConfigured,
+} from "@workspace/imagekit"
 
 import {
   saveRefreshToken,
@@ -49,6 +56,11 @@ type VerifyOtpDTO = {
   email: string
   otp: string
 }
+
+/** Max avatar upload size (decoded bytes). */
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024
+
+const AVATAR_UPLOAD_FOLDER = "/hackhub/avatars"
 
 class AuthService {
   async register(data: RegisterDTO) {
@@ -376,6 +388,82 @@ class AuthService {
       id: account.id,
       email: account.email,
       user: account.user,
+    }
+  }
+
+  async updateProfile(accountId: string, data: UpdateProfileInput) {
+    const account = await prisma.account.findUnique({
+      where: { id: accountId },
+      include: { user: true },
+    })
+
+    if (!account?.user) {
+      throw new NotFoundError("User not found")
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: account.user.id },
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.bio !== undefined ? { bio: data.bio ?? null } : {}),
+        ...(data.avatar !== undefined ? { avatar: data.avatar ?? null } : {}),
+      },
+    })
+
+    return {
+      id: account.id,
+      email: account.email,
+      user: updated,
+    }
+  }
+
+  async uploadAvatar(accountId: string, file: string, fileName?: string) {
+    if (!isImageKitConfigured()) {
+      throw new BadRequestError(
+        "Image uploads are not configured. Set the ImageKit credentials and try again."
+      )
+    }
+
+    const account = await prisma.account.findUnique({
+      where: { id: accountId },
+      include: { user: true },
+    })
+
+    if (!account?.user) {
+      throw new NotFoundError("User not found")
+    }
+
+    // MIME type is sniffed from the file signature, not the declared type.
+    const image = decodeBase64Image(file)
+
+    if (!image) {
+      throw new BadRequestError(
+        "Upload a JPEG, PNG, WebP or GIF image as a base64 data URL."
+      )
+    }
+
+    if (image.buffer.length > AVATAR_MAX_BYTES) {
+      throw new BadRequestError("Image must be 2MB or smaller.")
+    }
+
+    const upload = await uploadImage({
+      file: image.buffer,
+      fileName:
+        fileName?.trim() || `avatar-${account.user.username}.${image.ext}`,
+      folder: AVATAR_UPLOAD_FOLDER,
+      tags: ["avatar", account.user.id],
+    })
+
+    const updated = await prisma.user.update({
+      where: { id: account.user.id },
+      data: { avatar: upload.url },
+    })
+
+    return {
+      id: account.id,
+      email: account.email,
+      user: updated,
+      fileId: upload.fileId,
     }
   }
 }

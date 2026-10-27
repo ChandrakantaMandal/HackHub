@@ -5,6 +5,8 @@ import {
   registerSchema,
   loginSchema,
   refreshTokenSchema,
+  updateProfileSchema,
+  avatarUploadSchema,
 } from "@workspace/utils"
 
 import { validate } from "../middleware/auth.middleware"
@@ -25,5 +27,17 @@ router.post("/reset-password", AuthController.resetPassword)
 
 router.post("/logout", verifyToken, AuthController.logout)
 router.get("/profile", verifyToken, AuthController.profile)
+router.patch(
+  "/profile",
+  verifyToken,
+  validate(updateProfileSchema),
+  AuthController.updateProfile
+)
+router.post(
+  "/avatar",
+  verifyToken,
+  validate(avatarUploadSchema),
+  AuthController.uploadAvatar
+)
 
 export default router

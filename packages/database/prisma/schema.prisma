@@ -42,6 +42,7 @@ model User {
   sentMessages Message[]
   hackathons Hackathon[]
   hackathonRegistrations HackathonRegistration[]
+  roomReads RoomRead[]
 }
 
 enum UserRole {
@@ -79,7 +80,7 @@ model TeamMember {
 }
 
 enum TeamRole {
-  OWNER
+  LEADER
   MEMBER
 }
 
@@ -306,6 +307,7 @@ model Room {
   name      String    @unique
   type      RoomType
   messages  Message[]
+  reads     RoomRead[]
   createdAt DateTime  @default(now())
 }
 
@@ -319,6 +321,22 @@ model Message {
   createdAt DateTime @default(now())
 
   @@index([roomId, createdAt])
+}
+
+// Per-user read cursor for a room. Unread count = messages in the room with
+// createdAt > lastReadAt that the user did not send themselves. Touched when
+// the user joins/focuses a room. Composite key so a user has one row per room.
+model RoomRead {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roomId     String
+  room       Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, roomId])
+  @@index([userId])
 }
 
 // =====================

@@ -50,14 +50,14 @@ function MemberRow({ member }: { member: TeamMember }) {
         )}
       </div>
       <Badge
-        variant={member.role === "OWNER" ? "default" : "outline"}
+        variant={member.role === "LEADER" ? "default" : "outline"}
         className={
-          member.role === "OWNER"
+          member.role === "LEADER"
             ? "bg-violet-600 text-white hover:bg-violet-600"
             : "border-slate-700 text-slate-400"
         }
       >
-        {member.role}
+        {member.role === "LEADER" ? "Leader" : "Member"}
       </Badge>
     </div>
   )

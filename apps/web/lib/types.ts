@@ -22,7 +22,7 @@ export interface SessionTokens {
   sessionId: string
 }
 
-export type TeamRole = "OWNER" | "MEMBER"
+export type TeamRole = "LEADER" | "MEMBER"
 
 export interface TeamMember {
   id: string
@@ -167,8 +167,55 @@ export interface Hackathon {
   isRegistrationOpen: boolean
 }
 
+export interface TeamLeaderboardEntry {
+  rank: number
+  teamId: string
+  teamName: string
+  projectId: string
+  projectTitle: string
+  averageScore: number
+  judgeCount: number
+}
+
 export interface ShowcaseStats {
   projects: number
   likes: number
   comments: number
+}
+
+export interface ChatUser {
+  id: string
+  username: string
+  name: string | null
+  avatar: string | null
+}
+
+export interface ConversationsResponse {
+  teams: {
+    room: string
+    teamId: string
+    name: string
+    members: ChatUser[]
+    unread: number
+  }[]
+  dms: {
+    room: string
+    user: ChatUser
+    lastMessage: { content: string; createdAt: string } | null
+    unread: number
+  }[]
+}
+
+export interface ChatUnreadSummary {
+  total: number
+  byRoom: Record<string, number>
+}
+
+export interface ChatMessage {
+  id: string
+  roomId?: string
+  room?: string
+  senderId: string
+  content: string
+  createdAt: string
 }

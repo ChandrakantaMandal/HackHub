@@ -24,6 +24,19 @@ class HackathonController {
     }
   }
 
+  // GET /api/hackathons/:id/leaderboard — public team rankings for one
+  // hackathon, ranked by the average judge score.
+  async leaderboard(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await HackathonService.getLeaderboard(
+        req.params.id as string
+      )
+      return res.status(200).json({ success: true, data })
+    } catch (error) {
+      next(error)
+    }
+  }
+
   // POST /api/hackathons/join — register via join code.
   async join(req: Request, res: Response, next: NextFunction) {
     try {

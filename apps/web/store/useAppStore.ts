@@ -15,6 +15,8 @@ interface AuthState {
       role?: "PARTICIPANT" | "JUDGE" | "ADMIN"
       name?: string | null
       avatar?: string | null
+      bio?: string | null
+      updatedAt?: string | null
     }
   } | null
 

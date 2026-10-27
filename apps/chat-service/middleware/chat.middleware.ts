@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express"
 import { ZodSchema, ZodError } from "zod"
+import { resolveUser } from "../libs/identity"
 
 // Validates and parses req.body against a zod schema (same pattern as project-service).
 export const validate =
@@ -25,30 +26,39 @@ export const validate =
     }
   }
 
-// Reads x-user-id / x-user-role headers injected by the API Gateway after its
-// authMiddleware verifies the JWT. This service performs NO token verification
-// on the REST path; the gateway is the single auth enforcement point.
-// (Socket.io verifies the JWT itself at handshake — see src/socket.ts.)
-// Fail-closed: missing identity headers => 401.
-export const userContext = (
+// Reads x-user-id (the JWT subject = *account* id) injected by the API Gateway
+// after its authMiddleware verifies the JWT, then resolves it to the User row
+// (id + role) — chat authorization keys off User.id, not Account.id.
+// This service performs NO token verification on the REST path; the gateway is
+// the single auth enforcement point. (Socket.io verifies the JWT itself and
+// resolves the same way — see src/socket.ts.)
+// Fail-closed: missing identity headers or unknown account => 401.
+export const userContext = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  const userId = req.headers["x-user-id"]
-  const userRole = req.headers["x-user-role"]
+  try {
+    const accountId = req.headers["x-user-id"]
 
-  if (!userId || typeof userId !== "string") {
-    return res.status(401).json({
-      success: false,
-      error: "Unauthorized: Missing user context",
-    })
+    if (!accountId || typeof accountId !== "string") {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized: Missing user context",
+      })
+    }
+
+    const user = await resolveUser(accountId)
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized: Unknown user",
+      })
+    }
+
+    ;(req as any).user = user
+    next()
+  } catch (error) {
+    next(error)
   }
-
-  ;(req as any).user = {
-    id: userId,
-    role: typeof userRole === "string" ? userRole : "user",
-  }
-
-  next()
 }

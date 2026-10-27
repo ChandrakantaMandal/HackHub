@@ -144,15 +144,17 @@ describe("updateProjectSchema", () => {
 })
 
 describe("createTaskSchema", () => {
-  it("accepts title only", () => {
-    expect(createTaskSchema.safeParse({ title: "Build auth" }).success).toBe(
-      true
-    )
+  it("accepts projectId and title only", () => {
+    expect(
+      createTaskSchema.safeParse({ projectId: "proj-1", title: "Build auth" })
+        .success
+    ).toBe(true)
   })
 
   it("accepts title with optional fields", () => {
     expect(
       createTaskSchema.safeParse({
+        projectId: "proj-1",
         title: "Build auth",
         description: "JWT flow",
         assignedTo: "user-1",
@@ -160,12 +162,26 @@ describe("createTaskSchema", () => {
     ).toBe(true)
   })
 
+  it("rejects missing projectId", () => {
+    expect(createTaskSchema.safeParse({ title: "Build auth" }).success).toBe(
+      false
+    )
+  })
+
+  it("rejects empty projectId", () => {
+    expect(
+      createTaskSchema.safeParse({ projectId: "", title: "Build auth" }).success
+    ).toBe(false)
+  })
+
   it("rejects empty title", () => {
     expect(createTaskSchema.safeParse({ title: "" }).success).toBe(false)
   })
 
   it("rejects missing title", () => {
-    expect(createTaskSchema.safeParse({}).success).toBe(false)
+    expect(createTaskSchema.safeParse({ projectId: "proj-1" }).success).toBe(
+      false
+    )
   })
 })
 

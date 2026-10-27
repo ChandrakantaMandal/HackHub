@@ -8,7 +8,8 @@ import { errorMiddleware } from "@workspace/error-handler"
 const app = express()
 
 app.use(httpLogger)
-app.use(express.json())
+// 5mb JSON limit so base64 avatar uploads fit (default is 100kb).
+app.use(express.json({ limit: "5mb" }))
 
 // Health check endpoint
 app.get("/health", (req, res) => {

@@ -74,6 +74,24 @@ const TASK_STATUS_MAP = {
   completed: "DONE",
 } as const
 
+const TASK_STATUS_LABEL = {
+  TODO: "todo",
+  IN_PROGRESS: "in_progress",
+  DONE: "completed",
+} as const
+
+// The API contract exposes lowercase statuses ("todo" | "in_progress" |
+// "completed") while Prisma stores the uppercase enum. Every task leaving
+// this service goes through toTaskDto so clients never see raw enum values.
+function toTaskDto<T extends { status: string }>(task: T) {
+  return {
+    ...task,
+    status:
+      TASK_STATUS_LABEL[task.status as keyof typeof TASK_STATUS_LABEL] ??
+      "todo",
+  }
+}
+
 function computeProgress(tasks: { status: string }[]): number {
   if (tasks.length === 0) return 0
   const completedCount = tasks.filter((t) => t.status === "DONE").length
@@ -100,7 +118,7 @@ class ProjectService {
           inviteCode,
           ownerId: userId,
           members: {
-            create: { userId, role: "OWNER" },
+            create: { userId, role: "LEADER" },
           },
         },
         include: {
@@ -212,7 +230,7 @@ class ProjectService {
       }
 
       if (team.ownerId !== userId) {
-        throw new ForbiddenError("Only the team owner can delete this team")
+        throw new ForbiddenError("Only the team leader can delete this team")
       }
 
       await prisma.team.delete({ where: { id: teamId } })
@@ -261,14 +279,14 @@ class ProjectService {
       }
 
       if (targetUserId === actorUserId) {
-        // Self-removal: members may leave, but the owner must delete the team.
+        // Self-removal: members may leave, but the leader must delete the team.
         if (team.ownerId === actorUserId) {
           throw new ForbiddenError(
-            "Owner cannot leave team; delete the team instead"
+            "Leader cannot leave team; delete the team instead"
           )
         }
       } else if (team.ownerId !== actorUserId) {
-        throw new ForbiddenError("Only the team owner can remove members")
+        throw new ForbiddenError("Only the team leader can remove members")
       }
 
       await prisma.teamMember.delete({ where: { id: member.id } })
@@ -363,10 +381,35 @@ class ProjectService {
 
   async updateTaskStatus(data: UpdateTaskDTO) {
     try {
-      const { taskId, status } = data
+      const { taskId, status, userId } = data
 
       if (!taskId || !status) {
         throw new ValidationError("Task ID and status are required")
+      }
+
+      const existing = await prisma.task.findUnique({
+        where: { id: taskId },
+        include: { project: { select: { teamId: true } } },
+      })
+
+      if (!existing) {
+        throw new NotFoundError("Task not found")
+      }
+
+      const team = await this.assertTeamMember(existing.project.teamId, userId)
+
+      const isLeader = team.ownerId === userId
+      const isAssignee = existing.assignedTo === userId
+      if (existing.assignedTo) {
+        if (!isAssignee) {
+          throw new ForbiddenError(
+            "Only the assigned member can change this task's status"
+          )
+        }
+      } else if (!isLeader) {
+        throw new ForbiddenError(
+          "Only the team leader can change the status of an unassigned task"
+        )
       }
 
       const task = await prisma.task.update({
@@ -384,7 +427,7 @@ class ProjectService {
         `[TASK_UPDATE] Task ${taskId} status changed to ${status}. New progress: ${progress}%`
       )
       return {
-        task,
+        task: toTaskDto(task),
         progress,
         message: "Task updated successfully",
       }
@@ -404,7 +447,7 @@ class ProjectService {
 
   async submitProject(data: SubmitProjectDTO) {
     try {
-      const { projectId, githubUrl, liveDemoUrl } = data
+      const { projectId, githubUrl, liveDemoUrl, userId } = data
 
       if (!projectId || !githubUrl) {
         throw new ValidationError(
@@ -418,6 +461,11 @@ class ProjectService {
 
       if (!project) {
         throw new NotFoundError("Project not found")
+      }
+
+      const team = await this.assertTeamMember(project.teamId, userId)
+      if (team.ownerId !== userId) {
+        throw new ForbiddenError("Only the team leader can submit the project")
       }
 
       const submission = await prisma.submission.create({
@@ -579,6 +627,7 @@ class ProjectService {
 
       return {
         ...project,
+        tasks: project.tasks.map((t) => toTaskDto(t)),
         progress: computeProgress(project.tasks),
       }
     } catch (error) {
@@ -693,6 +742,10 @@ class ProjectService {
 
       const team = await this.assertTeamMember(project.teamId, userId)
 
+      if (team.ownerId !== userId) {
+        throw new ForbiddenError("Only the team leader can create tasks")
+      }
+
       if (assignedTo) {
         const isTeamMember =
           team.ownerId === assignedTo ||
@@ -717,7 +770,7 @@ class ProjectService {
 
       logger.info(`[TASK_CREATE] Task "${title}" created in ${projectId}`)
       return {
-        task,
+        task: toTaskDto(task),
         progress: computeProgress(allTasks),
         message: "Task created successfully",
       }
@@ -753,13 +806,32 @@ class ProjectService {
       }
 
       const team = await this.assertTeamMember(task.project.teamId, userId)
+      const isLeader = team.ownerId === userId
 
       const payload: Prisma.TaskUpdateInput = {}
       if (title !== undefined) payload.title = title
       if (description !== undefined) payload.description = description
-      if (status !== undefined) payload.status = TASK_STATUS_MAP[status]
+
+      if (status !== undefined) {
+        const isAssignee = task.assignedTo === userId
+        if (task.assignedTo) {
+          if (!isAssignee) {
+            throw new ForbiddenError(
+              "Only the assigned member can change this task's status"
+            )
+          }
+        } else if (!isLeader) {
+          throw new ForbiddenError(
+            "Only the team leader can change the status of an unassigned task"
+          )
+        }
+        payload.status = TASK_STATUS_MAP[status]
+      }
 
       if (assignedTo !== undefined) {
+        if (!isLeader) {
+          throw new ForbiddenError("Only the team leader can reassign tasks")
+        }
         const assignee = assignedTo === "" ? null : assignedTo
         if (assignee) {
           const isTeamMember =
@@ -790,7 +862,7 @@ class ProjectService {
         `[TASK_UPDATE] Task ${taskId} updated. Progress: ${progress}%`
       )
       return {
-        task: updated,
+        task: toTaskDto(updated),
         progress,
         message: "Task updated successfully",
       }

@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { motion, Variants } from "framer-motion"
+import { motion, useInView, Variants } from "framer-motion"
 import {
   Rocket,
   Users,
@@ -67,6 +67,12 @@ const features: Feature[] = [
     description:
       "Everything you need to turn a 48-hour hackathon project into a real startup.",
   },
+  {
+    icon: Trophy,
+    title: "Live Leaderboards",
+    description:
+      "Public, per-hackathon rankings so every team knows exactly where they stand.",
+  },
 ]
 
 const containerVariants: Variants = {
@@ -94,6 +100,30 @@ function formatDate(value: string) {
     day: "numeric",
     year: "numeric",
   })
+}
+
+// Counts up from 0 to `value` when scrolled into view.
+function AnimatedCounter({ value }: { value: number }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const inView = useInView(ref, { once: true, margin: "-40px" })
+  const [display, setDisplay] = useState(0)
+
+  useEffect(() => {
+    if (!inView) return
+    let frame = 0
+    const duration = 1200
+    const start = performance.now()
+    const tick = (now: number) => {
+      const progress = Math.min((now - start) / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setDisplay(Math.round(value * eased))
+      if (progress < 1) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [inView, value])
+
+  return <span ref={ref}>{display}</span>
 }
 
 export default function LandingPage() {
@@ -136,17 +166,42 @@ export default function LandingPage() {
             >
               Showcase
             </Link>
-            <Button
-              render={
-                <Link href={isAuthenticated ? "/dashboard" : "/signup"} />
-              }
-              nativeButton={false}
-              variant="outline"
-              size="sm"
-              className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800 hover:text-white"
+            <Link
+              href="/leaderboard"
+              className="hidden text-slate-300 transition-colors hover:text-white sm:block"
             >
-              {isAuthenticated ? "Go To Dashboard" : "Sign In"}
-            </Button>
+              Leaderboard
+            </Link>
+            {isAuthenticated ? (
+              <Button
+                render={<Link href="/dashboard" />}
+                nativeButton={false}
+                size="sm"
+                className="bg-purple-600 text-white shadow-lg shadow-purple-600/25 hover:bg-purple-500"
+              >
+                Go To Dashboard
+              </Button>
+            ) : (
+              <>
+                <Button
+                  render={<Link href="/signin" />}
+                  nativeButton={false}
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800 hover:text-white"
+                >
+                  Sign In
+                </Button>
+                <Button
+                  render={<Link href="/signup" />}
+                  nativeButton={false}
+                  size="sm"
+                  className="bg-purple-600 text-white shadow-lg shadow-purple-600/25 hover:bg-purple-500"
+                >
+                  Sign Up
+                </Button>
+              </>
+            )}
           </div>
         </nav>
       </motion.header>
@@ -175,6 +230,18 @@ export default function LandingPage() {
             }}
             transition={{
               duration: 22,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          />
+          <motion.div
+            className="absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-pink-600/10 blur-[130px]"
+            animate={{
+              scale: [1, 1.25, 1],
+              opacity: [0.5, 1, 0.5],
+            }}
+            transition={{
+              duration: 14,
               repeat: Infinity,
               ease: "easeInOut",
             }}
@@ -242,6 +309,16 @@ export default function LandingPage() {
                 View Showcase
                 <Eye className="h-4 w-4" />
               </Button>
+              <Button
+                render={<Link href="/leaderboard" />}
+                nativeButton={false}
+                variant="outline"
+                size="lg"
+                className="h-12 gap-2 rounded-xl border-amber-500/30 bg-slate-900/50 px-8 text-base text-amber-300 backdrop-blur-sm hover:border-amber-400/50 hover:bg-slate-800 hover:text-amber-200"
+              >
+                Leaderboard
+                <Trophy className="h-4 w-4" />
+              </Button>
             </motion.div>
           </motion.div>
         </div>
@@ -256,6 +333,51 @@ export default function LandingPage() {
             <div className="h-2 w-1 rounded-full bg-purple-400" />
           </div>
         </motion.div>
+      </section>
+
+      {/* Live Stats Band */}
+      <section className="border-t border-slate-800/80 bg-slate-950 py-16">
+        <div className="mx-auto grid max-w-5xl gap-8 px-6 sm:grid-cols-3">
+          {[
+            {
+              value: hackathons.length,
+              label: "Active hackathons",
+              accent: "text-purple-400",
+            },
+            {
+              value: hackathons.reduce((sum, h) => sum + h.participantCount, 0),
+              label: "Registered participants",
+              accent: "text-pink-400",
+            },
+            {
+              value: 100,
+              suffix: "/100",
+              label: "Judge-verified scores",
+              accent: "text-amber-400",
+            },
+          ].map((stat, index) => (
+            <motion.div
+              key={stat.label}
+              className="text-center"
+              initial={{ y: 20, opacity: 0 }}
+              whileInView={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.5, delay: index * 0.1 }}
+              viewport={{ once: true }}
+            >
+              <p
+                className={`text-4xl font-black tracking-tight sm:text-5xl ${stat.accent}`}
+              >
+                <AnimatedCounter value={stat.value} />
+                {stat.suffix && (
+                  <span className="text-2xl font-bold sm:text-3xl">
+                    {stat.suffix}
+                  </span>
+                )}
+              </p>
+              <p className="mt-2 text-sm text-slate-500">{stat.label}</p>
+            </motion.div>
+          ))}
+        </div>
       </section>
 
       {/* Features Section */}
@@ -451,6 +573,29 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             <Rocket className="h-5 w-5 text-purple-400" />
             <span className="font-bold text-slate-200">HackHub</span>
+          </div>
+          <div className="flex items-center gap-6 text-sm text-slate-400">
+            <Link
+              href="/showcase"
+              className="transition-colors hover:text-white"
+            >
+              Showcase
+            </Link>
+            <Link
+              href="/leaderboard"
+              className="transition-colors hover:text-white"
+            >
+              Leaderboard
+            </Link>
+            <Link href="/signin" className="transition-colors hover:text-white">
+              Sign In
+            </Link>
+            <Link
+              href="/signup"
+              className="rounded-lg bg-purple-600/20 px-3 py-1.5 font-medium text-purple-300 transition-colors hover:bg-purple-600 hover:text-white"
+            >
+              Sign Up
+            </Link>
           </div>
           <p className="text-sm text-slate-500">
             © {new Date().getFullYear()} HackHub. Built for creators, by

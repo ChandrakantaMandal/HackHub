@@ -14,6 +14,9 @@ const { mockPrisma } = vi.hoisted(() => ({
       findMany: vi.fn(),
       count: vi.fn(),
     },
+    project: {
+      findMany: vi.fn(),
+    },
   },
 }))
 
@@ -325,5 +328,127 @@ describe("hackathonService.registerByCode", () => {
       400,
       "Registration deadline has passed"
     )
+  })
+})
+
+describe("hackathonService.getLeaderboard", () => {
+  function makeScoredProject(
+    projectId: string,
+    teamId: string,
+    teamName: string,
+    title: string,
+    scores: number[]
+  ) {
+    return {
+      id: projectId,
+      title,
+      team: { id: teamId, name: teamName },
+      submission: {
+        judgeScores: scores.map((finalScore) => ({ finalScore })),
+      },
+    }
+  }
+
+  it("rejects an invalid hackathon id with 400", async () => {
+    await expectRejection(
+      hackathonService.getLeaderboard("not-a-uuid"),
+      400,
+      "Invalid hackathon id"
+    )
+    expect(mockPrisma.project.findMany).not.toHaveBeenCalled()
+  })
+
+  it("rejects when the hackathon does not exist with 404", async () => {
+    mockPrisma.hackathon.findUnique.mockResolvedValue(null)
+
+    await expectRejection(
+      hackathonService.getLeaderboard(H_ID),
+      404,
+      "Hackathon not found"
+    )
+    expect(mockPrisma.project.findMany).not.toHaveBeenCalled()
+  })
+
+  it("ranks teams by average judge score, highest first", async () => {
+    mockPrisma.hackathon.findUnique.mockResolvedValue({ id: H_ID })
+    mockPrisma.project.findMany.mockResolvedValue([
+      makeScoredProject("p1", "t1", "Alpha Coders", "Alpha App", [70, 80]),
+      makeScoredProject("p2", "t2", "Beta Builders", "Beta App", [90, 100]),
+    ])
+
+    const result = await hackathonService.getLeaderboard(H_ID)
+
+    expect(mockPrisma.project.findMany).toHaveBeenCalledWith({
+      where: { hackathonId: H_ID },
+      select: {
+        id: true,
+        title: true,
+        team: { select: { id: true, name: true } },
+        submission: {
+          select: { judgeScores: { select: { finalScore: true } } },
+        },
+      },
+    })
+    expect(result).toHaveLength(2)
+    expect(result[0]).toMatchObject({
+      rank: 1,
+      teamId: "t2",
+      teamName: "Beta Builders",
+      projectTitle: "Beta App",
+      averageScore: 95,
+      judgeCount: 2,
+    })
+    expect(result[1]).toMatchObject({
+      rank: 2,
+      teamId: "t1",
+      averageScore: 75,
+    })
+  })
+
+  it("shares a rank for tied scores and skips the next rank", async () => {
+    mockPrisma.hackathon.findUnique.mockResolvedValue({ id: H_ID })
+    mockPrisma.project.findMany.mockResolvedValue([
+      makeScoredProject("p1", "t1", "Team One", "App One", [80]),
+      makeScoredProject("p2", "t2", "Team Two", "App Two", [80]),
+      makeScoredProject("p3", "t3", "Team Three", "App Three", [50]),
+    ])
+
+    const result = await hackathonService.getLeaderboard(H_ID)
+
+    expect(result.map((r) => r.rank)).toEqual([1, 1, 3])
+  })
+
+  it("omits projects without judge scores and returns [] when none qualify", async () => {
+    mockPrisma.hackathon.findUnique.mockResolvedValue({ id: H_ID })
+    mockPrisma.project.findMany.mockResolvedValue([
+      {
+        id: "p1",
+        title: "Draft App",
+        team: { id: "t1", name: "Draft Team" },
+        submission: null,
+      },
+      {
+        id: "p2",
+        title: "Unjudged App",
+        team: { id: "t2", name: "Unjudged Team" },
+        submission: { judgeScores: [] },
+      },
+    ])
+
+    const result = await hackathonService.getLeaderboard(H_ID)
+
+    expect(result).toEqual([])
+  })
+
+  it("rounds averaged scores to two decimal places", async () => {
+    mockPrisma.hackathon.findUnique.mockResolvedValue({ id: H_ID })
+    mockPrisma.project.findMany.mockResolvedValue([
+      makeScoredProject("p1", "t1", "Team A", "App A", [70, 71, 72]),
+    ])
+
+    const result = await hackathonService.getLeaderboard(H_ID)
+
+    expect(result[0].averageScore).toBe(71)
+    expect(result[0].judgeCount).toBe(3)
   })
 })

@@ -20,6 +20,11 @@ router.post(
   HackathonController.join
 )
 // Static paths are registered before the parameterized route.
+router.get(
+  "/:id/leaderboard",
+  optionalUserContext,
+  HackathonController.leaderboard
+)
 router.post("/:id/register", userContext, HackathonController.register)
 
 export default router

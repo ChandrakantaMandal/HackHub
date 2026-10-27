@@ -90,6 +90,39 @@ class AuthController {
     }
   }
 
+  async updateProfile(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user
+
+      const result = await AuthService.updateProfile(user.id, req.body)
+
+      return res.status(200).json({
+        success: true,
+        message: "Profile updated",
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async uploadAvatar(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = (req as any).user
+      const { file, fileName } = req.body
+
+      const result = await AuthService.uploadAvatar(user.id, file, fileName)
+
+      return res.status(200).json({
+        success: true,
+        message: "Avatar updated",
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
   async verifyOtp(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await AuthService.verifyOtp(req.body)
