@@ -1,7 +1,17 @@
 -- Rename the team "owner" role to "leader" (product terminology change).
--- AlterEnum first: add LEADER, drop OWNER (a value cannot be renamed in-place).
-ALTER TYPE "TeamRole" ADD VALUE 'LEADER';
-ALTER TYPE "TeamRole" DROP VALUE 'OWNER';
+-- Postgres has no DROP VALUE for enums (and values cannot be renamed in
+-- place), so the type is recreated without 'OWNER'. The column is widened
+-- to TEXT first so the type can be swapped inside one transaction.
+ALTER TABLE "TeamMember" ALTER COLUMN "role" DROP DEFAULT;
+ALTER TABLE "TeamMember" ALTER COLUMN "role" TYPE TEXT USING "role"::text;
+
+DROP TYPE "TeamRole";
+CREATE TYPE "TeamRole" AS ENUM ('LEADER', 'MEMBER');
+
+ALTER TABLE "TeamMember"
+  ALTER COLUMN "role" TYPE "TeamRole"
+  USING (CASE WHEN "role" = 'OWNER' THEN 'LEADER' ELSE 'MEMBER' END)::"TeamRole";
+ALTER TABLE "TeamMember" ALTER COLUMN "role" SET DEFAULT 'MEMBER';
 
 -- CreateTable: RoomRead (per-user read cursor powering unread badges)
 CREATE TABLE "RoomRead" (

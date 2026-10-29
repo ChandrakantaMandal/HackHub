@@ -1,3 +1,5 @@
+import * as path from "node:path"
+
 import { diag, DiagConsoleLogger, DiagLogLevel } from "@opentelemetry/api"
 
 import { NodeSDK } from "@opentelemetry/sdk-node"
@@ -12,6 +14,19 @@ import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics"
 import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs"
 
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO)
+
+function resolveServiceName(): string {
+  if (process.env.OTEL_SERVICE_NAME) return process.env.OTEL_SERVICE_NAME
+  // e.g. "D:\Project\HackHub\apps\project-service\src\index.ts" → "project-service"
+  const script = (process.argv[1] ?? "").replace(/\\/g, "/")
+  const appMatch = script.match(/\/apps\/([^/]+)\//)
+  if (appMatch) return appMatch[1]
+  const pkg = process.env.npm_package_name
+  if (pkg) return pkg.replace(/^@[^/]+\//, "")
+  return path.basename(process.cwd())
+}
+
+process.env.OTEL_SERVICE_NAME = resolveServiceName()
 
 const endpoint = (
   process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "http://localhost:4318"

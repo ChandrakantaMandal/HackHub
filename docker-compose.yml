@@ -1,20 +1,352 @@
-version: "3.8"
+# ============================================================
+# HackHub — full project + LGTM observability stack
+#
+#   Infra : postgres, redis
+#   Migrate: one-shot `prisma migrate deploy` (runs before apps)
+#   Apps  : 7 backends (tsx) + 3 Next.js frontends
+#   Obs   : LGTM (Grafana, Loki, Tempo, Mimir) + OTLP receiver
+#
+# Usage:
+#   docker compose up -d --build          # everything
+#   docker compose --profile tools up -d  # + admin seed script
+#   docker compose up -d postgres redis lgtm   # infra only
+# ============================================================
+
+name: hackhub
+
+# Shared env for every backend: required boot vars (env.ts validates and
+# exits on failure) + in-network service URLs + OTLP export to the LGTM stack.
+x-backend-env: &backend-env
+  NODE_ENV: production
+  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hackhub
+  ACCESS_SECRET: ${ACCESS_SECRET:-dev-access-secret-change-me}
+  REFRESH_SECRET: ${REFRESH_SECRET:-dev-refresh-secret-change-me}
+  REDIS_URL: redis://redis:6379
+  GMAIL_USER: ${GMAIL_USER:-dev@example.com}
+  GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-dev-app-password}
+  AUTH_SERVICE_URL: http://auth-service:6001
+  PROJECT_SERVICE_URL: http://project-service:5002
+  JUDGE_SERVICE_URL: http://judge-service:5003
+  SHOWCASE_SERVICE_URL: http://showcase-service:5004
+  CHAT_SERVICE_URL: http://chat-service:5005
+  ADMIN_SERVICE_URL: http://admin-service:5006
+  CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
 
 services:
+  # ==========================================================
+  # Infrastructure
+  # ==========================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: hackhub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: hackhub
+    # Uncomment to also expose the DB on the host (clashes with a
+    # locally-running Postgres on 5432 otherwise):
+    # ports:
+    #   - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hackhub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - hackhub-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: hackhub-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    # Uncomment to also expose Redis on the host (clashes with a
+    # locally-running Redis on 6379 otherwise):
+    # ports:
+    #   - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - hackhub-net
+
+  # One-shot: applies committed Prisma migrations before the backends boot.
+  # It exits when migrations are done (that's how one-shot jobs work);
+  # `pnpm docker:up` removes the exited container afterwards.
+  migrate:
+    image: hackhub-auth-service:latest
+    build:
+      context: .
+      dockerfile: apps/auth-service/Dockerfile
+    command: ["pnpm", "--filter", "@workspace/database", "db:migrate:deploy"]
+    restart: "no"
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hackhub-net
+
+  # Optional: seed the initial admin user (docker compose --profile tools up)
+  seed-admin:
+    image: hackhub-admin-service:latest
+    build:
+      context: .
+      dockerfile: apps/admin-service/Dockerfile
+    profiles: ["tools"]
+    command: ["pnpm", "db:seed-admin"]
+    restart: "no"
+    environment:
+      <<: *backend-env
+      # The image excludes .env (dockerignore), so seed values must be
+      # interpolated from the host's .env by docker compose.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - hackhub-net
+
+  # ==========================================================
+  # Backends (Express + tsx)
+  # ==========================================================
+  api-gateway:
+    image: hackhub-api-gateway:latest
+    build:
+      context: .
+      dockerfile: apps/api-gateway/Dockerfile
+    container_name: hackhub-api-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - hackhub-net
+
+  auth-service:
+    image: hackhub-auth-service:latest
+    build:
+      context: .
+      dockerfile: apps/auth-service/Dockerfile
+    container_name: hackhub-auth-service
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - hackhub-net
+
+  project-service:
+    image: hackhub-project-service:latest
+    build:
+      context: .
+      dockerfile: apps/project-service/Dockerfile
+    container_name: hackhub-project-service
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - hackhub-net
+
+  judge-service:
+    image: hackhub-judge-service:latest
+    build:
+      context: .
+      dockerfile: apps/judge-service/Dockerfile
+    container_name: hackhub-judge-service
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - hackhub-net
+
+  showcase-service:
+    image: hackhub-showcase-service:latest
+    build:
+      context: .
+      dockerfile: apps/showcase-service/Dockerfile
+    container_name: hackhub-showcase-service
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - hackhub-net
+
+  chat-service:
+    image: hackhub-chat-service:latest
+    build:
+      context: .
+      dockerfile: apps/chat-service/Dockerfile
+    container_name: hackhub-chat-service
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - hackhub-net
+
+  admin-service:
+    image: hackhub-admin-service:latest
+    build:
+      context: .
+      dockerfile: apps/admin-service/Dockerfile
+    container_name: hackhub-admin-service
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - hackhub-net
+
+  # ==========================================================
+  # Frontends (Next.js 16)
+  # ==========================================================
+  web:
+    image: hackhub-web:latest
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Read by the browser on the host → host-reachable gateway URL
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080/api/auth}
+        NEXT_PUBLIC_GATEWAY_URL: ${NEXT_PUBLIC_GATEWAY_URL:-http://localhost:8080}
+    container_name: hackhub-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      api-gateway:
+        condition: service_started
+    networks:
+      - hackhub-net
+
+  admin:
+    image: hackhub-admin:latest
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        # Read by next.config.ts at build time; rewrites are resolved
+        # server-side inside the container → in-network gateway URL
+        GATEWAY_URL: http://api-gateway:8080
+    container_name: hackhub-admin
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    depends_on:
+      api-gateway:
+        condition: service_started
+    networks:
+      - hackhub-net
+
+  judge:
+    image: hackhub-judge:latest
+    build:
+      context: .
+      dockerfile: apps/judge/Dockerfile
+      args:
+        GATEWAY_URL: http://api-gateway:8080
+    container_name: hackhub-judge
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    depends_on:
+      api-gateway:
+        condition: service_started
+    networks:
+      - hackhub-net
+
+  # ==========================================================
+  # LGTM observability stack (Grafana, Loki, Tempo, Mimir)
+  # Grafana UI: http://localhost:3009  (admin/admin)
+  # ==========================================================
   lgtm:
     image: grafana/otel-lgtm:latest
     container_name: lgtm-stack
+    restart: unless-stopped
     ports:
-      - "3000:3000" # Grafana UI
+      - "3009:3000" # Grafana UI
       - "4317:4317" # OTLP gRPC receiver (traces, metrics, logs)
       - "4318:4318" # OTLP HTTP receiver (traces, metrics, logs)
       - "3100:3100" # Loki
       - "9090:9090" # Prometheus / Mimir
     environment:
       - OTEL_SERVICE_NAME=lgtm-stack
+    volumes:
+      # Persist ALL LGTM state (Grafana DB incl. dashboards, Loki chunks,
+      # Tempo blocks, Mimir data) — without this, every container recreate
+      # wipes loaded dashboards and telemetry history.
+      - lgtmdata:/data
+      # Auto-provision the HackHub dashboard from the repo on every start
+      # (no manual upload needed; survives restarts and re-creates).
+      - ./observability/grafana/provisioning/dashboards.yml:/otel-lgtm/grafana/conf/provisioning/dashboards/hackhub.yaml:ro
+      - ./observability/hackhub-lgtm-dashboard.json:/otel-lgtm/grafana-dashboards/hackhub-lgtm-dashboard.json:ro
     networks:
-      - lgtm-net
+      - hackhub-net
 
 networks:
-  lgtm-net:
+  hackhub-net:
     driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+  lgtmdata:

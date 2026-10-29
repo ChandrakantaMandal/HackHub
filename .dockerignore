@@ -1,0 +1,55 @@
+# NOTE: dockerignore patterns match the FULL path (unlike .gitignore),
+# so nested dirs need an explicit **/ prefix.
+
+# Dependencies (reinstalled inside the image)
+node_modules
+**/node_modules
+.pnpm-store
+**/.pnpm-store
+
+# Build outputs (rebuilt inside the image)
+**/.turbo
+**/.next
+**/dist
+**/build
+**/out
+**/*.tsbuildinfo
+
+# Env & secrets (injected at runtime via docker-compose / --env-file)
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Logs
+logs
+**/logs
+*.log
+**/*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Tests & coverage (not needed in runtime images)
+**/coverage
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+
+# Git / CI / tooling
+.git
+.github
+.husky
+.vscode
+.idea
+
+# Docker (don't rebuild the image from inside the image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Misc
+**/.DS_Store
+*.pem
+**/.vercel
+docs

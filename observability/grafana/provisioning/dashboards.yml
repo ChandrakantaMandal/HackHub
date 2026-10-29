@@ -1,0 +1,17 @@
+# Grafana dashboard provisioning — mounted into the LGTM container at
+# /otel-lgtm/grafana/conf/provisioning/dashboards/hackhub.yaml. The JSON is
+# loaded from the repo on every container start, so the HackHub dashboard
+# always exists without manual uploads (UI edits are re-synced from the file).
+apiVersion: 1
+providers:
+  - name: hackhub
+    orgId: 1
+    folder: HackHub
+    type: file
+    disableDeletion: false
+    # Allow UI edits, but re-apply the repo file on restart for reproducibility
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /otel-lgtm/grafana-dashboards
+      foldersFromFilesStructure: false
