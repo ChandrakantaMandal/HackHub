@@ -1,3 +1,3 @@
-import config from "@hackhub/eslint-config/base";
+import config from "@hackhub/eslint-config/base"
 
-export default config;
+export default config

@@ -46,7 +46,9 @@ function makeHackathon(overrides: Record<string, unknown> = {}) {
     location: "Online",
     startDate: new Date("2026-11-01"),
     endDate: new Date("2026-11-03"),
-    registrationDeadline: new Date("2026-10-31"),
+    // Relative to "now" so the default fixture stays "open"; overrides below
+    // still exercise past deadlines explicitly.
+    registrationDeadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     allowJoin: true,
     maxTeamSize: 4,
     status: "ACTIVE",

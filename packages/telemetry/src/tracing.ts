@@ -20,7 +20,7 @@ function resolveServiceName(): string {
   // e.g. "D:\Project\HackHub\apps\project-service\src\index.ts" → "project-service"
   const script = (process.argv[1] ?? "").replace(/\\/g, "/")
   const appMatch = script.match(/\/apps\/([^/]+)\//)
-  if (appMatch) return appMatch[1]
+  if (appMatch?.[1]) return appMatch[1]
   const pkg = process.env.npm_package_name
   if (pkg) return pkg.replace(/^@[^/]+\//, "")
   return path.basename(process.cwd())

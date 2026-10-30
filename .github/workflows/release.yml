@@ -1,0 +1,59 @@
+# ============================================================
+# Release — semantic versioning via semantic-release.
+#
+# Runs ONLY on push to main (after CI has passed on that commit,
+# thanks to `needs`-free but branch-protected ordering / required checks).
+#
+# semantic-release will:
+#   - analyze Conventional Commits since the last release
+#   - determine the next version (major/minor/patch)
+#   - generate/update CHANGELOG.md
+#   - commit the version bump + changelog back to main
+#   - create a Git tag (vX.Y.Z) and a GitHub Release
+#
+# Requires these repo secrets (set once in GitHub → Settings → Secrets):
+#   GIT_PUSH_TOKEN   — a PAT (or the default GITHUB_TOKEN with contents:write)
+# ============================================================
+
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  release:
+    name: Semantic release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GIT_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          HUSKY: "0"
+
+      - name: Semantic release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: pnpm exec semantic-release

@@ -487,7 +487,9 @@ describe("project-service integration", () => {
       location: "Online",
       startDate: new Date("2026-11-01T00:00:00Z"),
       endDate: new Date("2026-11-03T00:00:00Z"),
-      registrationDeadline: new Date("2026-10-30T00:00:00Z"),
+      // Relative to "now" so the fixture never expires (a fixed past date
+      // would eventually make registration look closed and fail these tests).
+      registrationDeadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       allowJoin: true,
       maxTeamSize: 4,
       status: "ACTIVE",
