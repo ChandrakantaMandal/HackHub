@@ -17,7 +17,7 @@
     "db:migrate": "pnpm --filter @workspace/database db:migrate",
     "db:studio": "pnpm --filter @workspace/database db:studio",
     "db:seed-admin": "pnpm --filter admin-service seed-admin",
-    "docker:start": "docker compose up -d --build && docker compose rm -sf migrate && docker compose --profile tools run --rm seed-admin || echo [docker:start] seed-admin skipped - set ADMIN_EMAIL and ADMIN_PASSWORD in .env",
+    "docker:start": "docker compose up -d --build && docker compose rm -sf migrate && docker compose --profile tools run --rm --no-deps seed-admin || echo [docker:start] seed-admin skipped - set ADMIN_EMAIL and ADMIN_PASSWORD in .env",
     "docker:up": "docker compose up -d --build && docker compose rm -sf migrate",
     "docker:build": "docker compose build",
     "docker:down": "docker compose down",
@@ -25,7 +25,7 @@
     "docker:logs": "docker compose logs -f --tail=200",
     "docker:restart": "docker compose restart",
     "docker:migrate": "docker compose run --rm migrate",
-    "docker:seed-admin": "docker compose --profile tools run --rm seed-admin",
+    "docker:seed-admin": "docker compose --profile tools run --rm --no-deps seed-admin",
     "docker:infra": "docker compose up -d postgres redis lgtm",
     "docker:obs": "docker compose up -d lgtm",
     "docker:clean": "docker compose down -v --rmi local"

@@ -18,10 +18,10 @@ name: hackhub
 # exits on failure) + in-network service URLs + OTLP export to the LGTM stack.
 x-backend-env: &backend-env
   NODE_ENV: production
-  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hackhub
+  DATABASE_URL: ${DATABASE_URL}
   ACCESS_SECRET: ${ACCESS_SECRET:-dev-access-secret-change-me}
   REFRESH_SECRET: ${REFRESH_SECRET:-dev-refresh-secret-change-me}
-  REDIS_URL: redis://redis:6379
+  REDIS_URL: ${REDIS_URL}
   GMAIL_USER: ${GMAIL_USER:-dev@example.com}
   GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-dev-app-password}
   AUTH_SERVICE_URL: http://auth-service:6001
@@ -42,17 +42,17 @@ services:
     container_name: hackhub-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: hackhub
-    # Uncomment to also expose the DB on the host (clashes with a
-    # locally-running Postgres on 5432 otherwise):
-    # ports:
-    #   - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-hackhub}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d hackhub"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-hackhub}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -63,11 +63,14 @@ services:
     image: redis:7-alpine
     container_name: hackhub-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    # Uncomment to also expose Redis on the host (clashes with a
-    # locally-running Redis on 6379 otherwise):
-    # ports:
-    #   - "6379:6379"
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD:-redis}",
+      ]
     volumes:
       - redisdata:/data
     healthcheck:

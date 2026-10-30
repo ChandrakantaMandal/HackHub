@@ -343,6 +343,8 @@ That single script does the whole flow:
 5. `lgtm` starts Grafana with the HackHub dashboard auto-provisioned
 6. the first admin user is seeded (idempotent; needs `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env` — skipped with a notice if unset)
 
+> The one-shot `migrate` container is **removed automatically** once its migrations finish (`docker compose rm -sf migrate`), so it won't linger as an `Exited` row in `docker ps`. The seed step runs with `--no-deps`, so it doesn't re-create `migrate` either. Re-run it any time with `pnpm docker:migrate` if you add new migrations.
+
 Prefer steps instead? Every piece is also available on its own:
 
 ```bash
