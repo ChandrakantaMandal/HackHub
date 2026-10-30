@@ -10,6 +10,8 @@
 #   - generate/update CHANGELOG.md
 #   - commit the version bump + changelog back to main
 #   - create a Git tag (vX.Y.Z) and a GitHub Release
+#   - then trigger the Docker (GHCR) build for that new version,
+#     tagging images vX.Y.Z / X.Y / latest (see the `docker` job)
 #
 # Requires these repo secrets (set once in GitHub → Settings → Secrets):
 #   GIT_PUSH_TOKEN   — a PAT (or the default GITHUB_TOKEN with contents:write)
@@ -35,15 +37,18 @@ jobs:
   release:
     name: Semantic release
     runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.semrel.outputs.released }}
+      version: ${{ steps.semrel.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ secrets.GIT_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -54,6 +59,46 @@ jobs:
           HUSKY: "0"
 
       - name: Semantic release
+        id: semrel
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
-        run: pnpm exec semantic-release
+        run: |
+          latest_remote_tag() {
+            git ls-remote --tags origin 2>/dev/null \
+              | awk -F'refs/tags/' '{print $2}' \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -V \
+              | tail -1
+          }
+          BEFORE="$(latest_remote_tag || true)"
+          pnpm exec semantic-release
+          AFTER="$(latest_remote_tag || true)"
+          echo "Latest release tag before: ${BEFORE:-<none>}"
+          echo "Latest release tag after:  ${AFTER:-<none>}"
+          if [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "version=${AFTER#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ------------------------------------------------------------
+  # Build & push GHCR images whenever semantic-release produces a
+  # new version. Calls the reusable Docker workflow and passes the
+  # exact version so images are tagged vX.Y.Z + X.Y + latest.
+  # This runs deterministically in the same workflow run, so it is
+  # NOT dependent on the version-tag push triggering a separate
+  # workflow (which GitHub blocks for GITHUB_TOKEN pushes).
+  # ------------------------------------------------------------
+  docker:
+    name: Build & push images
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    uses: ./.github/workflows/docker.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit
